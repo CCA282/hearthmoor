@@ -6,7 +6,7 @@ import { ENEMY_SPAWNS } from '../constants/enemies.js'
 import { WORKBENCH_POSITION, CRAFT_RANGE, RECIPES } from '../constants/crafting.js'
 import { ITEMS } from '../constants/items.js'
 import {
-  PLAYER_MAX_HEALTH, PLAYER_ATTACK_DAMAGE, PLAYER_ATTACK_RANGE, PLAYER_ATTACK_COOLDOWN,
+  PLAYER_MAX_HEALTH, PLAYER_ATTACK_RANGE, PLAYER_ATTACK_COOLDOWN,
   ENEMY_MAX_HEALTH, ENEMY_ATTACK_DAMAGE, ENEMY_RESPAWN_TIME,
 } from '../constants/combat.js'
 import { cameraPositionFor } from './camera.js'
@@ -15,7 +15,7 @@ import { findNearestNode, hitNode, tickNodeRespawn } from './resources.js'
 import { stepEnemy, findNearestEnemy } from './enemyAI.js'
 import { createInventory, addItem } from '../inventory.js'
 import { canAffordRecipe, craftRecipe } from '../crafting.js'
-import { equipItem } from '../equipment.js'
+import { equipItem, attackDamageFor } from '../equipment.js'
 import { applyDamage, isDead } from '../combat.js'
 import { game } from '../store.js'
 
@@ -378,7 +378,7 @@ export class Scene {
   // (mesh hidden, respawn timer starts — see _updateEnemies) and drops a
   // small amount of loot into the attacker's inventory.
   _attackFor(player, enemy) {
-    enemy.health = applyDamage(enemy.health, PLAYER_ATTACK_DAMAGE)
+    enemy.health = applyDamage(enemy.health, attackDamageFor(player))
     if (!isDead(enemy.health)) return
 
     enemy.mesh.visible = false
