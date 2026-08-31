@@ -10,4 +10,5 @@ export const game = reactive({
   hint: '',
   health: PLAYER_MAX_HEALTH,
   maxHealth: PLAYER_MAX_HEALTH,
+  equipment: { weapon: null },
 })

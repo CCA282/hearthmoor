@@ -3,6 +3,8 @@ import { CAMERA_FRUSTUM_SIZE, CAMERA_NEAR, CAMERA_FAR } from '../constants/camer
 import { PLAYER_SPEED } from '../constants/gameplay.js'
 import { RESOURCE_NODES, NODE_HP, NODE_YIELD_PER_HIT, HARVEST_RANGE } from '../constants/nodes.js'
 import { ENEMY_SPAWNS } from '../constants/enemies.js'
+import { WORKBENCH_POSITION, CRAFT_RANGE, RECIPES } from '../constants/crafting.js'
+import { ITEMS } from '../constants/items.js'
 import {
   PLAYER_MAX_HEALTH, PLAYER_ATTACK_DAMAGE, PLAYER_ATTACK_RANGE, PLAYER_ATTACK_COOLDOWN,
   ENEMY_MAX_HEALTH, ENEMY_ATTACK_DAMAGE, ENEMY_RESPAWN_TIME,
@@ -12,10 +14,13 @@ import { stepPosition } from './movement.js'
 import { findNearestNode, hitNode, tickNodeRespawn } from './resources.js'
 import { stepEnemy, findNearestEnemy } from './enemyAI.js'
 import { createInventory, addItem } from '../inventory.js'
+import { canAffordRecipe, craftRecipe } from '../crafting.js'
+import { equipItem } from '../equipment.js'
 import { applyDamage, isDead } from '../combat.js'
 import { game } from '../store.js'
 
 const HARVEST_HINT = 'Espace / A pour récolter'
+const CRAFT_HINT = 'Espace / A pour forger la hache'
 const ATTACK_HINT = 'F / X pour attaquer'
 const LOCAL_PLAYER_ID = 'local'
 const LOCAL_PLAYER_COLOR = '#6fa8b8'
@@ -43,6 +48,7 @@ export class Scene {
     this._setupHearthMarker()
     this._setupNodes()
     this._setupEnemies()
+    this._setupWorkbench()
 
     this.players = []
     this.localPlayerId = LOCAL_PLAYER_ID
@@ -78,6 +84,7 @@ export class Scene {
     const player = {
       id, position: { ...position }, mesh,
       inventory: createInventory(),
+      equipment: { weapon: null },
       health: PLAYER_MAX_HEALTH, maxHealth: PLAYER_MAX_HEALTH, attackCooldown: 0,
       remoteInput: null,
     }
@@ -90,6 +97,7 @@ export class Scene {
     game.inventory = player.inventory
     game.health = player.health
     game.maxHealth = player.maxHealth
+    game.equipment = player.equipment
   }
 
   removePlayer(id) {
@@ -291,6 +299,37 @@ export class Scene {
     return group
   }
 
+  // A single fixed crafting spot near camp (docs/spec.md §9) — one recipe
+  // for now (see constants/crafting.js), no selection UI needed yet.
+  _setupWorkbench() {
+    const geo = new THREE.BoxGeometry(1.4, 0.5, 0.9)
+    const mat = new THREE.MeshLambertMaterial({ color: '#8a6a44' })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.position.set(WORKBENCH_POSITION.x, WORKBENCH_POSITION.y + 0.25, WORKBENCH_POSITION.z)
+    this.three.add(mesh)
+    this.workbench = { position: WORKBENCH_POSITION, mesh }
+  }
+
+  _nearWorkbench(pos) {
+    const d = Math.hypot(this.workbench.position.x - pos.x, this.workbench.position.z - pos.z)
+    return d <= CRAFT_RANGE
+  }
+
+  // Consumes the recipe's cost and adds its output to the player's
+  // inventory; auto-equips it if that item's slot is currently empty (no
+  // manual equip/swap UI yet — see constants/items.js, only one weapon exists).
+  _craftFor(player, recipe) {
+    if (!canAffordRecipe(player.inventory, recipe)) return
+    player.inventory = craftRecipe(player.inventory, recipe)
+
+    const slot = ITEMS[recipe.output]?.slot
+    if (slot && !player.equipment[slot]) {
+      player.equipment = equipItem(player.equipment, recipe.output)
+    }
+
+    if (player.id === this.localPlayerId) this._syncLocalHudFromPlayer(player)
+  }
+
   _movePlayer(player, dir, dt) {
     player.position = stepPosition(player.position, dir, PLAYER_SPEED, dt)
     player.mesh.position.set(player.position.x, player.position.y, player.position.z)
@@ -437,15 +476,17 @@ export class Scene {
       this._movePlayer(player, dir, dt)
 
       const nearestNode = findNearestNode(this.nodes, player.position, HARVEST_RANGE)
+      const nearWorkbench = this._nearWorkbench(player.position)
       const nearestEnemy = findNearestEnemy(this.enemies, player.position, PLAYER_ATTACK_RANGE)
       if (isLocal) {
         this.nearestNode = nearestNode
         this.nearestEnemy = nearestEnemy
-        game.hint = nearestNode ? HARVEST_HINT : nearestEnemy ? ATTACK_HINT : ''
+        game.hint = nearestNode ? HARVEST_HINT : nearWorkbench ? CRAFT_HINT : nearestEnemy ? ATTACK_HINT : ''
       }
 
       const actionPressed = isLocal ? input.actionPressed() : this._consumeRemoteAction(player)
       if (nearestNode && actionPressed) this._harvestFor(player, nearestNode)
+      else if (nearWorkbench && actionPressed) this._craftFor(player, RECIPES[0])
 
       player.attackCooldown = Math.max(0, player.attackCooldown - dt)
       const attackPressed = isLocal ? input.attackPressed() : this._consumeRemoteAttack(player)
