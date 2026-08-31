@@ -97,6 +97,20 @@ class Engine {
     this.scene.applySnapshot(snap)
   }
 
+  // Starts a fresh game — used both for "new game" (no snapshot) and for
+  // "continue" (a snapshot loaded from localStorage/Postgres, same shape as
+  // the network sync snapshot, see docs/spec.md §12). Replaces `this.scene`
+  // outright rather than mutating the existing one so a stale in-progress
+  // game (dead enemies, depleted nodes...) never bleeds into the next one.
+  newGame(snapshot = null) {
+    this.scene = new Scene()
+    if (snapshot) this.scene.applySnapshot(snapshot)
+    this._syncTimer = 0
+    this._inputTimer = 0
+    this._pendingAction = false
+    this._pendingAttack = false
+  }
+
   stop() {
     this.running = false
     cancelAnimationFrame(this.raf)
