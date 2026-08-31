@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import GameCanvas from './components/GameCanvas.vue'
+import Hud from './components/Hud.vue'
 import Lobby from './components/Lobby.vue'
 import { netState } from './net/netState.js'
 
@@ -10,7 +11,10 @@ const inGame = computed(() => netState.mode !== null)
 <template>
   <div class="stage">
     <Lobby />
-    <GameCanvas v-if="inGame" />
+    <template v-if="inGame">
+      <GameCanvas />
+      <Hud />
+    </template>
   </div>
 </template>
 

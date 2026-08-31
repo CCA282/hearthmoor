@@ -6,6 +6,9 @@ import { cameraPositionFor } from './camera.js'
 import { stepPosition } from './movement.js'
 import { findNearestNode, hitNode, tickNodeRespawn } from './resources.js'
 import { createInventory, addItem } from '../inventory.js'
+import { game } from '../store.js'
+
+const HARVEST_HINT = 'Espace / A pour récolter'
 
 // Semi-isometric fixed-angle camera, low-poly ground + simple lighting/fog —
 // see docs/spec.md §3-4. No renderer here: WebGLRenderer needs a real <canvas>
@@ -24,6 +27,7 @@ export class Scene {
     this._setupNodes()
 
     this.inventory = createInventory()
+    game.inventory = this.inventory
     this.nearestNode = null
 
     this.cameraTarget = this.player.position
@@ -129,6 +133,7 @@ export class Scene {
 
     const { inventory } = addItem(this.inventory, node.item, NODE_YIELD_PER_HIT)
     this.inventory = inventory
+    game.inventory = this.inventory
   }
 
   _updateNodes(dt) {
@@ -160,6 +165,7 @@ export class Scene {
       this.cameraTarget = this.player.position
 
       this.nearestNode = findNearestNode(this.nodes, this.player.position, HARVEST_RANGE)
+      game.hint = this.nearestNode ? HARVEST_HINT : ''
       if (this.nearestNode && input.actionPressed()) {
         this._harvest(this.nearestNode)
       }
