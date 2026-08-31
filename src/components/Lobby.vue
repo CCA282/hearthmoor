@@ -1,7 +1,11 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { netState } from '../net/netState.js'
-import { createRoomAsHost, joinRoomAsGuest, leaveRoom, onHostLeft, onDisconnected } from '../net/realtime.js'
+import {
+  createRoomAsHost, joinRoomAsGuest, leaveRoom,
+  onGuestJoined, onGuestLeft, onInput, onState, onHostLeft, onDisconnected,
+} from '../net/realtime.js'
+import { engine } from '../game/engine.js'
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
@@ -27,7 +31,11 @@ function goOnline() { step.value = 'online'; error.value = '' }
 async function createRoom() {
   error.value = ''; busy.value = true
   try {
+    onGuestJoined(({ guestId }) => { engine.scene.addPlayer(guestId) })
+    onGuestLeft(({ guestId }) => { engine.scene.removePlayer(guestId) })
+    onInput(({ guestId, input }) => { engine.scene.applyRemoteInput(guestId, input) })
     onDisconnected(() => { netState.connected = false })
+
     const { code } = await createRoomAsHost()
     netState.connected = true
     displayCode.value = code
@@ -48,9 +56,20 @@ async function joinRoom() {
   if (code.length !== 6) { error.value = 'Code invalide (6 caractères)'; return }
   error.value = ''; busy.value = true
   try {
+    // Guests don't simulate anyone locally (docs/spec.md §7) — the scene's
+    // constructor-created 'local' player is a solo/host-only assumption and
+    // would otherwise linger as an orphaned ghost, since nothing ever removes
+    // a player id that the host never uses. See engine.js/Scene.js for the
+    // rest of the guest sync path (applySnapshot/setLocalPlayerId).
+    engine.scene.removePlayer('local')
+
+    onState((snap) => { engine.applySnapshot(snap) })
     onHostLeft(() => { error.value = "L'hôte a quitté la partie" })
     onDisconnected(() => { netState.connected = false })
-    await joinRoomAsGuest(code, netState.playerName.trim() || null)
+
+    const { guestId } = await joinRoomAsGuest(code, netState.playerName.trim() || null)
+    engine.scene.setLocalPlayerId(guestId)
+    netState.myPlayerId = guestId
     netState.connected = true
     netState.roomCode = code
     netState.mode = 'guest'
