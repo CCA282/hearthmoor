@@ -5,6 +5,10 @@ import { ITEMS } from '../game/constants/items.js'
 
 const stacks = computed(() => game.inventory.filter(Boolean))
 const healthPct = computed(() => (game.maxHealth > 0 ? (game.health / game.maxHealth) * 100 : 0))
+const equippedWeaponName = computed(() => {
+  const id = game.equipment?.weapon
+  return id ? ITEMS[id]?.name : null
+})
 </script>
 
 <template>
@@ -18,6 +22,7 @@ const healthPct = computed(() => (game.maxHealth > 0 ? (game.health / game.maxHe
       <div class="health-fill" :style="{ width: healthPct + '%' }" />
       <span class="health-label">{{ Math.ceil(game.health) }} / {{ game.maxHealth }}</span>
     </div>
+    <div class="equipped" v-if="equippedWeaponName">🪓 {{ equippedWeaponName }}</div>
     <div class="hint" v-if="game.hint">{{ game.hint }}</div>
   </div>
 </template>
@@ -72,6 +77,18 @@ const healthPct = computed(() => (game.maxHealth > 0 ? (game.health / game.maxHe
   font-weight: 800;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.equipped {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  background: rgba(18, 24, 28, 0.72);
+  color: var(--moor-ink);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
 }
 
 .hint {

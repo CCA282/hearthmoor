@@ -126,6 +126,7 @@ export class Scene {
         id: p.id,
         x: p.position.x, y: p.position.y, z: p.position.z,
         inventory: p.inventory,
+        equipment: p.equipment,
         health: p.health,
       })),
       nodes: this.nodes.map((n) => ({
@@ -148,6 +149,7 @@ export class Scene {
       player.position = { x: sp.x, y: sp.y, z: sp.z }
       player.mesh.position.set(sp.x, sp.y, sp.z)
       player.inventory = sp.inventory
+      player.equipment = sp.equipment
       player.health = sp.health
       if (player.id === this.localPlayerId) this._syncLocalHudFromPlayer(player)
     }

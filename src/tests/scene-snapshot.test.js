@@ -37,6 +37,13 @@ describe('Scene — serializeSnapshot', () => {
     expect(snap.players.find((p) => p.id === scene.localPlayerId).health).toBe(65)
   })
 
+  it('includes the local player equipment', () => {
+    const scene = new Scene()
+    scene.localPlayer.equipment.weapon = 'hache_bois'
+    const snap = scene.serializeSnapshot()
+    expect(snap.players.find((p) => p.id === scene.localPlayerId).equipment).toEqual({ weapon: 'hache_bois' })
+  })
+
   it('includes every enemy with position and health', () => {
     const scene = new Scene()
     const snap = scene.serializeSnapshot()
@@ -59,7 +66,7 @@ describe('Scene — serializeSnapshot', () => {
 describe('Scene — applySnapshot', () => {
   function baseSnap(scene, overrides = {}) {
     return {
-      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], health: 100 }],
+      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], equipment: { weapon: null }, health: 100 }],
       nodes: scene.nodes.map((n) => ({ id: n.id, hp: n.hp, depleted: false, respawnTimer: 0 })),
       enemies: scene.enemies.map((e) => ({ id: e.id, x: e.position.x, y: e.position.y, z: e.position.z, health: e.health })),
       ...overrides,
@@ -69,7 +76,7 @@ describe('Scene — applySnapshot', () => {
   it('moves an existing player to the received position', () => {
     const scene = new Scene()
     const snap = baseSnap(scene, {
-      players: [{ id: scene.localPlayerId, x: 9, y: 0.9, z: -4, inventory: [], health: 100 }],
+      players: [{ id: scene.localPlayerId, x: 9, y: 0.9, z: -4, inventory: [], equipment: { weapon: null }, health: 100 }],
     })
     scene.applySnapshot(snap)
     expect(scene.localPlayer.position).toEqual({ x: 9, y: 0.9, z: -4 })
@@ -80,8 +87,8 @@ describe('Scene — applySnapshot', () => {
     const scene = new Scene()
     scene.applySnapshot(baseSnap(scene, {
       players: [
-        { id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], health: 100 },
-        { id: 'guest-1', x: 2, y: 0.9, z: 2, inventory: [], health: 100 },
+        { id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], equipment: { weapon: null }, health: 100 },
+        { id: 'guest-1', x: 2, y: 0.9, z: 2, inventory: [], equipment: { weapon: null }, health: 100 },
       ],
     }))
     expect(scene.findPlayer('guest-1')).toBeTruthy()
@@ -100,7 +107,7 @@ describe('Scene — applySnapshot', () => {
   it('replaces the inventory with the received one', () => {
     const scene = new Scene()
     scene.applySnapshot(baseSnap(scene, {
-      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [{ itemId: 'stone', count: 4 }], health: 100 }],
+      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [{ itemId: 'stone', count: 4 }], equipment: { weapon: null }, health: 100 }],
     }))
     expect(scene.localPlayer.inventory[0]).toEqual({ itemId: 'stone', count: 4 })
   })
@@ -108,10 +115,30 @@ describe('Scene — applySnapshot', () => {
   it('syncs the local player health into game.health', () => {
     const scene = new Scene()
     scene.applySnapshot(baseSnap(scene, {
-      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], health: 42 }],
+      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], equipment: { weapon: null }, health: 42 }],
     }))
     expect(scene.localPlayer.health).toBe(42)
     expect(game.health).toBe(42)
+  })
+
+  it('syncs the local player equipment into game.equipment', () => {
+    const scene = new Scene()
+    scene.applySnapshot(baseSnap(scene, {
+      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], equipment: { weapon: 'hache_bois' }, health: 100 }],
+    }))
+    expect(scene.localPlayer.equipment).toEqual({ weapon: 'hache_bois' })
+    expect(game.equipment).toEqual({ weapon: 'hache_bois' })
+  })
+
+  it('reflects a remote player equipment on findPlayer', () => {
+    const scene = new Scene()
+    scene.applySnapshot(baseSnap(scene, {
+      players: [
+        { id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], equipment: { weapon: null }, health: 100 },
+        { id: 'guest-1', x: 2, y: 0.9, z: 2, inventory: [], equipment: { weapon: 'hache_bois' }, health: 100 },
+      ],
+    }))
+    expect(scene.findPlayer('guest-1').equipment).toEqual({ weapon: 'hache_bois' })
   })
 
   it('syncs enemy position/health and hides dead ones', () => {
