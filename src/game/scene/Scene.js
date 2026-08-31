@@ -78,6 +78,59 @@ export class Scene {
     this.players.splice(idx, 1)
   }
 
+  // Guest side: which player in the (possibly not-yet-received) snapshot is
+  // "me" — known as soon as joinRoomAsGuest() resolves with our own guestId,
+  // but a `state` broadcast can arrive and create that player entry (colored
+  // as remote, since localPlayerId wasn't set yet) before that resolves. Fix
+  // the color up if so — see engine.js/Lobby.vue (task 14/15) for the race.
+  setLocalPlayerId(id) {
+    this.localPlayerId = id
+    const player = this.findPlayer(id)
+    if (player) player.mesh.material.color.set(LOCAL_PLAYER_COLOR)
+  }
+
+  // Host: full snapshot broadcast to guests (~30Hz, see engine.js task 14) —
+  // plain data only, no THREE references.
+  serializeSnapshot() {
+    return {
+      players: this.players.map((p) => ({
+        id: p.id,
+        x: p.position.x, y: p.position.y, z: p.position.z,
+        inventory: p.inventory,
+      })),
+      nodes: this.nodes.map((n) => ({
+        id: n.id, hp: n.hp, depleted: n.depleted, respawnTimer: n.respawnTimer,
+      })),
+    }
+  }
+
+  // Guest: apply a snapshot received from the host — no local simulation, the
+  // received state simply *is* the truth (docs/spec.md §7). Creates/removes
+  // player entries to match who the host says is in the room.
+  applySnapshot(snap) {
+    const seenIds = new Set()
+    for (const sp of snap.players) {
+      seenIds.add(sp.id)
+      const player = this.addPlayer(sp.id, { x: sp.x, y: sp.y, z: sp.z })
+      player.position = { x: sp.x, y: sp.y, z: sp.z }
+      player.mesh.position.set(sp.x, sp.y, sp.z)
+      player.inventory = sp.inventory
+      if (player.id === this.localPlayerId) game.inventory = player.inventory
+    }
+    for (const p of [...this.players]) {
+      if (!seenIds.has(p.id)) this.removePlayer(p.id)
+    }
+
+    for (const sn of snap.nodes) {
+      const node = this.nodes.find((n) => n.id === sn.id)
+      if (!node) continue
+      node.hp = sn.hp
+      node.depleted = sn.depleted
+      node.respawnTimer = sn.respawnTimer
+      node.mesh.visible = !node.depleted
+    }
+  }
+
   // Host side: latest input a guest sent for their player (see engine.js's
   // _tickHost/onInput wiring, task 14).
   applyRemoteInput(id, input) {
