@@ -1,0 +1,36 @@
+/* Hearthmoor — style global, ambiance viking/nordique froide */
+:root {
+  --moor-bg: #12181c;
+  --moor-panel: #1d2a2e;
+  --moor-panel-dark: #141e21;
+  --moor-ink: #e6ecec;
+  --moor-ink-soft: #9fb0b0;
+  --moor-fire: #e8974a;
+  --moor-frost: #6fa8b8;
+  --moor-shadow: rgba(0, 0, 0, 0.4);
+  font-family: 'Segoe UI', 'Helvetica Neue', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--moor-bg);
+  color: var(--moor-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
