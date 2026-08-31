@@ -9,11 +9,21 @@ import { createInventory, addItem } from '../inventory.js'
 import { game } from '../store.js'
 
 const HARVEST_HINT = 'Espace / A pour récolter'
+const LOCAL_PLAYER_ID = 'local'
+const LOCAL_PLAYER_COLOR = '#6fa8b8'
+const REMOTE_PLAYER_COLOR = '#c8895a'
+const SPAWN_POSITION = { x: 3, y: 0.9, z: 3 }
 
 // Semi-isometric fixed-angle camera, low-poly ground + simple lighting/fog —
 // see docs/spec.md §3-4. No renderer here: WebGLRenderer needs a real <canvas>
 // and is owned by engine.js, so this class stays constructible (and mostly
 // testable) outside a browser too.
+//
+// Multiplayer model: `players` holds everyone visible in the scene — the
+// local one (id === localPlayerId, driven by the real Input) plus remote
+// ones (driven by whatever was last received via applyRemoteInput). Guests
+// don't drive anyone locally at all — see applySnapshot()/updateGuestVisuals()
+// below and docs/spec.md §7 for why there's no client-side prediction.
 export class Scene {
   constructor() {
     this.three = new THREE.Scene()
@@ -23,25 +33,56 @@ export class Scene {
     this._setupLights()
     this._setupGround()
     this._setupHearthMarker()
-    this._setupPlayer()
     this._setupNodes()
 
-    this.inventory = createInventory()
-    game.inventory = this.inventory
+    this.players = []
+    this.localPlayerId = LOCAL_PLAYER_ID
+    this.addPlayer(LOCAL_PLAYER_ID, SPAWN_POSITION)
+
     this.nearestNode = null
 
-    this.cameraTarget = this.player.position
+    this.cameraTarget = this.localPlayer.position
     this.camera = this._createCamera()
     this._updateCamera()
   }
 
-  _setupPlayer() {
+  get localPlayer() {
+    return this.findPlayer(this.localPlayerId)
+  }
+
+  findPlayer(id) {
+    return this.players.find((p) => p.id === id) ?? null
+  }
+
+  addPlayer(id, position = SPAWN_POSITION) {
+    const existing = this.findPlayer(id)
+    if (existing) return existing
+
     const geo = new THREE.CapsuleGeometry(0.45, 0.9, 4, 8)
-    const mat = new THREE.MeshLambertMaterial({ color: '#6fa8b8' })
+    const color = id === this.localPlayerId ? LOCAL_PLAYER_COLOR : REMOTE_PLAYER_COLOR
+    const mat = new THREE.MeshLambertMaterial({ color })
     const mesh = new THREE.Mesh(geo, mat)
-    mesh.position.set(3, 0.9, 3)
+    mesh.position.set(position.x, position.y, position.z)
     this.three.add(mesh)
-    this.player = { position: { x: 3, y: 0.9, z: 3 }, mesh }
+
+    const player = { id, position: { ...position }, mesh, inventory: createInventory(), remoteInput: null }
+    this.players.push(player)
+    if (id === this.localPlayerId) game.inventory = player.inventory
+    return player
+  }
+
+  removePlayer(id) {
+    const idx = this.players.findIndex((p) => p.id === id)
+    if (idx === -1) return
+    this.three.remove(this.players[idx].mesh)
+    this.players.splice(idx, 1)
+  }
+
+  // Host side: latest input a guest sent for their player (see engine.js's
+  // _tickHost/onInput wiring, task 14).
+  applyRemoteInput(id, input) {
+    const player = this.findPlayer(id)
+    if (player) player.remoteInput = input
   }
 
   _createCamera() {
@@ -121,19 +162,40 @@ export class Scene {
     return mesh
   }
 
+  _movePlayer(player, dir, dt) {
+    player.position = stepPosition(player.position, dir, PLAYER_SPEED, dt)
+    player.mesh.position.set(player.position.x, player.position.y, player.position.z)
+    if (dir.x !== 0 || dir.z !== 0) {
+      player.mesh.rotation.y = Math.atan2(dir.x, dir.z)
+    }
+  }
+
+  _remoteMoveVector(player) {
+    return { x: player.remoteInput?.mx ?? 0, z: player.remoteInput?.mz ?? 0 }
+  }
+
+  // A guest's input pulse is already edge-detected on their end (see engine.js's
+  // _tickGuest, task 14) — consume it once so a single press doesn't harvest
+  // repeatedly across the frames before the next input message arrives.
+  _consumeRemoteAction(player) {
+    const pressed = !!player.remoteInput?.action
+    if (pressed && player.remoteInput) player.remoteInput.action = false
+    return pressed
+  }
+
   // One hit: yields an item, depletes the node after NODE_HP hits. The actual
   // hp/depleted/respawnTimer transitions are pure (resources.js) — this just
   // applies the result and syncs the THREE mesh + inventory.
-  _harvest(node) {
+  _harvestFor(player, node) {
     const idx = this.nodes.indexOf(node)
     const updated = hitNode(node)
     this.nodes[idx] = updated
     updated.mesh.visible = !updated.depleted
-    if (updated.depleted) this.nearestNode = null
+    if (updated.depleted && this.nearestNode === node) this.nearestNode = null
 
-    const { inventory } = addItem(this.inventory, node.item, NODE_YIELD_PER_HIT)
-    this.inventory = inventory
-    game.inventory = this.inventory
+    const { inventory } = addItem(player.inventory, node.item, NODE_YIELD_PER_HIT)
+    player.inventory = inventory
+    if (player.id === this.localPlayerId) game.inventory = player.inventory
   }
 
   _updateNodes(dt) {
@@ -152,24 +214,36 @@ export class Scene {
     this.camera.lookAt(this.cameraTarget.x, this.cameraTarget.y, this.cameraTarget.z)
   }
 
+  // Solo and host: full local simulation. Guests never call this — see
+  // applySnapshot()/updateGuestVisuals() instead.
   update(dt, input) {
     this._updateNodes(dt)
 
-    if (input) {
-      const dir = input.moveVector()
-      this.player.position = stepPosition(this.player.position, dir, PLAYER_SPEED, dt)
-      this.player.mesh.position.set(this.player.position.x, this.player.position.y, this.player.position.z)
-      if (dir.x !== 0 || dir.z !== 0) {
-        this.player.mesh.rotation.y = Math.atan2(dir.x, dir.z)
-      }
-      this.cameraTarget = this.player.position
+    for (const player of this.players) {
+      const isLocal = player.id === this.localPlayerId
+      if (isLocal && !input) continue
 
-      this.nearestNode = findNearestNode(this.nodes, this.player.position, HARVEST_RANGE)
-      game.hint = this.nearestNode ? HARVEST_HINT : ''
-      if (this.nearestNode && input.actionPressed()) {
-        this._harvest(this.nearestNode)
+      const dir = isLocal ? input.moveVector() : this._remoteMoveVector(player)
+      this._movePlayer(player, dir, dt)
+
+      const nearest = findNearestNode(this.nodes, player.position, HARVEST_RANGE)
+      if (isLocal) {
+        this.nearestNode = nearest
+        game.hint = nearest ? HARVEST_HINT : ''
       }
+
+      const actionPressed = isLocal ? input.actionPressed() : this._consumeRemoteAction(player)
+      if (nearest && actionPressed) this._harvestFor(player, nearest)
     }
+
+    if (this.localPlayer) this.cameraTarget = this.localPlayer.position
+    this._updateCamera()
+  }
+
+  // Guest: no local simulation (see docs/spec.md §7) — just keep the camera
+  // (and later, any purely-cosmetic animation) ticking between snapshots.
+  updateGuestVisuals(_dt) {
+    if (this.localPlayer) this.cameraTarget = this.localPlayer.position
     this._updateCamera()
   }
 }

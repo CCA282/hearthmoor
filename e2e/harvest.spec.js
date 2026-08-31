@@ -7,8 +7,8 @@ import { startLocalGame } from './helpers.js'
 async function teleportNearRock(page) {
   await page.evaluate(() => {
     const scene = window.__engine.scene
-    scene.player.position = { x: 6, y: 0.9, z: -6 }
-    scene.player.mesh.position.set(6, 0.9, -6)
+    scene.localPlayer.position = { x: 6, y: 0.9, z: -6 }
+    scene.localPlayer.mesh.position.set(6, 0.9, -6)
   })
 }
 
@@ -26,7 +26,7 @@ test.describe('Harvesting a resource node', () => {
 
     await press(page, 'Space')
 
-    const inventory = await page.evaluate(() => window.__engine.scene.inventory)
+    const inventory = await page.evaluate(() => window.__engine.scene.localPlayer.inventory)
     const stoneSlot = inventory.find((s) => s?.itemId === 'stone')
     expect(stoneSlot?.count).toBe(1)
   })
@@ -36,7 +36,7 @@ test.describe('Harvesting a resource node', () => {
     // Player spawns at (3, 0.9, 3) — far from every node.
     await press(page, 'Space')
 
-    const inventory = await page.evaluate(() => window.__engine.scene.inventory)
+    const inventory = await page.evaluate(() => window.__engine.scene.localPlayer.inventory)
     expect(inventory.every((s) => s === null)).toBe(true)
   })
 
@@ -49,7 +49,7 @@ test.describe('Harvesting a resource node', () => {
     const { count, depleted, visible } = await page.evaluate(() => {
       const scene = window.__engine.scene
       const rock = scene.nodes.find((n) => n.id === 'rock-1')
-      const stoneSlot = scene.inventory.find((s) => s?.itemId === 'stone')
+      const stoneSlot = scene.localPlayer.inventory.find((s) => s?.itemId === 'stone')
       return { count: stoneSlot?.count, depleted: rock.depleted, visible: rock.mesh.visible }
     })
     expect(count).toBe(3)
@@ -65,7 +65,7 @@ test.describe('Harvesting a resource node', () => {
     await press(page, 'Space') // one more press — should do nothing, node is gone from range
 
     const stoneSlot = await page.evaluate(() =>
-      window.__engine.scene.inventory.find((s) => s?.itemId === 'stone'))
+      window.__engine.scene.localPlayer.inventory.find((s) => s?.itemId === 'stone'))
     expect(stoneSlot.count).toBe(3)
   })
 })

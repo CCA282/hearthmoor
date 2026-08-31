@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import { startLocalGame } from './helpers.js'
 
 async function playerPos(page) {
-  return page.evaluate(() => ({ ...window.__engine.scene.player.position }))
+  return page.evaluate(() => ({ ...window.__engine.scene.localPlayer.position }))
 }
 
 test.describe('Player movement — keyboard', () => {
@@ -39,7 +39,7 @@ test.describe('Player movement — keyboard', () => {
     await page.keyboard.up('KeyD')
 
     const { playerX, cameraX } = await page.evaluate(() => ({
-      playerX: window.__engine.scene.player.position.x,
+      playerX: window.__engine.scene.localPlayer.position.x,
       cameraX: window.__engine.scene.camera.position.x,
     }))
     // camera.x = player.x + fixed offset (12) — see game/constants/camera.js

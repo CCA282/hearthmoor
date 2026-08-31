@@ -4,8 +4,8 @@ import { startLocalGame } from './helpers.js'
 async function teleportNearRock(page) {
   await page.evaluate(() => {
     const scene = window.__engine.scene
-    scene.player.position = { x: 6, y: 0.9, z: -6 }
-    scene.player.mesh.position.set(6, 0.9, -6)
+    scene.localPlayer.position = { x: 6, y: 0.9, z: -6 }
+    scene.localPlayer.mesh.position.set(6, 0.9, -6)
   })
 }
 
