@@ -70,7 +70,7 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
 | Path | Role |
 |------|------|
 | `src/game/engine.js` | Singleton: RAF loop over `THREE.WebGLRenderer`, canvas resize, owns the `Input` instance |
-| `src/game/scene/Scene.js` | `Scene` class (Three.js) — camera/ground/lights/fog setup + player mesh, equivalent of hamnet-village's `World.js` |
+| `src/game/scene/Scene.js` | `Scene` class (Three.js) — camera/ground/lights/fog, multiplayer `players[]` (local + remote), resource nodes, snapshot serialize/apply. Equivalent of hamnet-village's `World.js` |
 | `src/game/scene/camera.js` | Pure camera-follow math (no THREE/DOM) — unit-tested in isolation |
 | `src/game/scene/movement.js` | Pure movement math (combine/clamp input vectors, step position) — unit-tested in isolation |
 | `src/game/scene/resources.js` | Pure node logic: `findNearestNode`, `hitNode`, `tickNodeRespawn` — unit-tested in isolation |
@@ -84,13 +84,18 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
 | `src/components/Lobby.vue` | Home screen: pseudo, local mode, create/join room |
 | `src/net/*` | Supabase client, auth, room realtime relay (`hearthmoor:room:` prefix), generic save/load — ported from `hamnet-village` |
 
-Testing convention established here (mirrors hamnet-village's `World.js` mixins
-never being unit-tested directly, only their logic): anything that touches THREE
-objects, the DOM, or the Gamepad API (`Scene.js`, `engine.js`, `input/index.js`)
-is wiring-only and **not** unit tested — the math it depends on is extracted into
-plain functions (`scene/camera.js`, `scene/movement.js`, `input/keyboard.js`,
-`input/gamepad.js`) that are. Keep following this split as more systems
-(combat, inventory...) get added.
+Testing convention: `THREE.Scene`/`Mesh`/`Geometry`/`Camera`/`Light` are plain JS
+objects — they don't need a real browser/WebGL context to construct or update, so
+`Scene.js` **is** unit-tested directly (`new Scene()` works fine under vitest's
+`node` environment, see `src/tests/scene-snapshot.test.js`). Only `THREE.WebGLRenderer`
+needs a real `<canvas>` — that's why `engine.js` (which owns the renderer) and
+`input/index.js` (DOM listeners, `navigator.getGamepads()`) stay wiring-only,
+untested directly, with their math extracted into plain functions
+(`scene/camera.js`, `scene/movement.js`, `scene/resources.js`, `input/keyboard.js`,
+`input/gamepad.js`) instead. Prefer testing pure extracted logic over `Scene`
+methods when both are possible — it's faster and doesn't need a THREE instance —
+but don't hesitate to construct a real `Scene` for orchestration-level behavior
+(who gets created/removed, what gets synced) that doesn't reduce to one pure function.
 
 ### Tests
 
