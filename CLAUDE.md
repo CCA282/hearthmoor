@@ -8,21 +8,27 @@ as `hamnet-village`/`cine-planner`, but a separate concern (no shared table).
 
 ## Project status
 
-**Early foundation, not yet a game.** What exists and works: project scaffold,
-`net/` layer (Supabase client/auth/realtime rooms/generic save-load), a minimal
-Three.js scene (semi-isometric camera, ground, fog, lighting), keyboard+gamepad
-player movement + an edge-detected action button, a Lobby (local / create room /
-join room by code), a Prairie-zone resource-gathering loop (harvest trees/rocks
-into a discrete-item inventory, nodes deplete then respawn), and a HUD showing
-the inventory + a harvest hint.
+**Early foundation, not yet a game — but multiplayer sync now works.** What
+exists and works: project scaffold, `net/` layer (Supabase client/auth/realtime
+rooms/generic save-load), a minimal Three.js scene (semi-isometric camera,
+ground, fog, lighting), keyboard+gamepad player movement + an edge-detected
+action button, a Lobby (local / create room / join room by code), a Prairie-zone
+resource-gathering loop (harvest trees/rocks into a discrete-item per-player
+inventory, nodes deplete then respawn), a HUD showing the inventory + a harvest
+hint, and **real host/guest state sync**: the host simulates everyone (its own
+player from real input, remote players from their last-received input) and
+broadcasts a snapshot ~30Hz; guests never simulate locally (no client-side
+prediction, see `docs/spec.md` §7) and just apply whatever the host sends —
+see `Scene.serializeSnapshot`/`applySnapshot`, `engine.js`'s `_tickHost`/`_tickGuest`.
 
 What does **not** exist yet, despite being in `docs/spec.md`: the other 3 zones
-(Forêt sombre, Marais, Montagne), combat, equipment/crafting, buildings, any
-actual scene state sync between host/guest (rooms connect via Presence but each
-client currently renders its own unsynced local scene), and save/load of real
-game state (`net/sync.js`'s `saveLocal`/`saveServer` are wired but nothing calls
-them yet — there's no `serializeWorld`/`applyWorldState` equivalent, deferred
-until the state above is worth persisting across sessions).
+(Forêt sombre, Marais, Montagne), combat, equipment/crafting, buildings, and
+save/load of real game state (`net/sync.js`'s `saveLocal`/`saveServer` are wired
+but nothing calls them yet — no persistence across sessions, only live sync
+between players currently in the same room). Also not handled yet: returning
+from a `guest` session to the lobby and starting a fresh `local`/`host` game —
+`Lobby.vue`'s guest join path removes `Scene`'s default `'local'` player and
+nothing currently restores it, see the comment there.
 
 See `docs/spec.md` for the full v1 design spec and `docs/hamnet-village-tech-foundation.md`
 for the technical patterns reused from `hamnet-village`. Keep this section in
@@ -58,9 +64,10 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
   Montagne), not procedural.
 - Gameplay: discrete stackable items + equipment slots (grid inventory), not
   global resource counters.
-- Combat: latency-tolerant by design (telegraphed attacks, no client-side
-  prediction in v1) — the host-authoritative networking model is unchanged from
-  `hamnet-village`, see spec §7 for why.
+- Combat (not built yet): latency-tolerant by design (telegraphed attacks, no
+  client-side prediction) — same reasoning already applied to movement/harvesting,
+  see spec §7. The host-authoritative networking model itself is unchanged from
+  `hamnet-village`.
 - `net/` (Supabase client, auth, realtime rooms, save/load sync) is reused
   essentially unchanged from `hamnet-village`, just re-prefixed (`hearthmoor:room:`
   topics, `hearthmoor_worlds` table).
@@ -81,7 +88,7 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
 | `src/game/constants/*` | Declarative tuning data (camera, player speed, resource nodes, items) — no logic |
 | `src/components/GameCanvas.vue` | Mounts the `<canvas>`, calls `engine.start()`/`stop()` |
 | `src/components/Hud.vue` | Reads `game.inventory`/`game.hint`, purely presentational |
-| `src/components/Lobby.vue` | Home screen: pseudo, local mode, create/join room |
+| `src/components/Lobby.vue` | Home screen: pseudo, local mode, create/join room — wires host (`onGuestJoined`/`onGuestLeft`/`onInput`) and guest (`onState`, `setLocalPlayerId`) to `Scene` |
 | `src/net/*` | Supabase client, auth, room realtime relay (`hearthmoor:room:` prefix), generic save/load — ported from `hamnet-village` |
 
 Testing convention: `THREE.Scene`/`Mesh`/`Geometry`/`Camera`/`Light` are plain JS
