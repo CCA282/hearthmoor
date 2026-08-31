@@ -118,9 +118,13 @@ export class Scene {
         id: p.id,
         x: p.position.x, y: p.position.y, z: p.position.z,
         inventory: p.inventory,
+        health: p.health,
       })),
       nodes: this.nodes.map((n) => ({
         id: n.id, hp: n.hp, depleted: n.depleted, respawnTimer: n.respawnTimer,
+      })),
+      enemies: this.enemies.map((e) => ({
+        id: e.id, x: e.position.x, y: e.position.y, z: e.position.z, health: e.health,
       })),
     }
   }
@@ -136,7 +140,8 @@ export class Scene {
       player.position = { x: sp.x, y: sp.y, z: sp.z }
       player.mesh.position.set(sp.x, sp.y, sp.z)
       player.inventory = sp.inventory
-      if (player.id === this.localPlayerId) game.inventory = player.inventory
+      player.health = sp.health
+      if (player.id === this.localPlayerId) this._syncLocalHudFromPlayer(player)
     }
     for (const p of [...this.players]) {
       if (!seenIds.has(p.id)) this.removePlayer(p.id)
@@ -149,6 +154,18 @@ export class Scene {
       node.depleted = sn.depleted
       node.respawnTimer = sn.respawnTimer
       node.mesh.visible = !node.depleted
+    }
+
+    // Enemies are pre-created identically on host and guest (same
+    // ENEMY_SPAWNS constants, see _setupEnemies) — just sync position/health
+    // and derive visibility, same pattern as nodes above.
+    for (const se of snap.enemies ?? []) {
+      const enemy = this.enemies.find((e) => e.id === se.id)
+      if (!enemy) continue
+      enemy.position = { x: se.x, y: se.y, z: se.z }
+      enemy.health = se.health
+      enemy.mesh.position.set(se.x, se.y, se.z)
+      enemy.mesh.visible = !isDead(enemy.health)
     }
   }
 

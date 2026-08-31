@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Scene } from '../game/scene/Scene.js'
 import { addItem } from '../game/inventory.js'
+import { game } from '../game/store.js'
 
 // Scene doesn't need a real <canvas>/WebGL context to construct or to run its
 // non-rendering logic (THREE.Scene/Mesh/Geometry/Camera are plain JS objects)
@@ -29,6 +30,24 @@ describe('Scene — serializeSnapshot', () => {
     expect(snap.nodes[0]).toMatchObject({ hp: expect.any(Number), depleted: false })
   })
 
+  it('includes the local player health', () => {
+    const scene = new Scene()
+    scene.localPlayer.health = 65
+    const snap = scene.serializeSnapshot()
+    expect(snap.players.find((p) => p.id === scene.localPlayerId).health).toBe(65)
+  })
+
+  it('includes every enemy with position and health', () => {
+    const scene = new Scene()
+    const snap = scene.serializeSnapshot()
+    expect(snap.enemies.length).toBe(scene.enemies.length)
+    expect(snap.enemies[0]).toMatchObject({
+      id: scene.enemies[0].id,
+      x: scene.enemies[0].position.x,
+      health: scene.enemies[0].health,
+    })
+  })
+
   it('includes remote players added via addPlayer', () => {
     const scene = new Scene()
     scene.addPlayer('guest-1', { x: 1, y: 0.9, z: 1 })
@@ -40,8 +59,9 @@ describe('Scene — serializeSnapshot', () => {
 describe('Scene — applySnapshot', () => {
   function baseSnap(scene, overrides = {}) {
     return {
-      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [] }],
+      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], health: 100 }],
       nodes: scene.nodes.map((n) => ({ id: n.id, hp: n.hp, depleted: false, respawnTimer: 0 })),
+      enemies: scene.enemies.map((e) => ({ id: e.id, x: e.position.x, y: e.position.y, z: e.position.z, health: e.health })),
       ...overrides,
     }
   }
@@ -49,7 +69,7 @@ describe('Scene — applySnapshot', () => {
   it('moves an existing player to the received position', () => {
     const scene = new Scene()
     const snap = baseSnap(scene, {
-      players: [{ id: scene.localPlayerId, x: 9, y: 0.9, z: -4, inventory: [] }],
+      players: [{ id: scene.localPlayerId, x: 9, y: 0.9, z: -4, inventory: [], health: 100 }],
     })
     scene.applySnapshot(snap)
     expect(scene.localPlayer.position).toEqual({ x: 9, y: 0.9, z: -4 })
@@ -60,8 +80,8 @@ describe('Scene — applySnapshot', () => {
     const scene = new Scene()
     scene.applySnapshot(baseSnap(scene, {
       players: [
-        { id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [] },
-        { id: 'guest-1', x: 2, y: 0.9, z: 2, inventory: [] },
+        { id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], health: 100 },
+        { id: 'guest-1', x: 2, y: 0.9, z: 2, inventory: [], health: 100 },
       ],
     }))
     expect(scene.findPlayer('guest-1')).toBeTruthy()
@@ -80,9 +100,39 @@ describe('Scene — applySnapshot', () => {
   it('replaces the inventory with the received one', () => {
     const scene = new Scene()
     scene.applySnapshot(baseSnap(scene, {
-      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [{ itemId: 'stone', count: 4 }] }],
+      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [{ itemId: 'stone', count: 4 }], health: 100 }],
     }))
     expect(scene.localPlayer.inventory[0]).toEqual({ itemId: 'stone', count: 4 })
+  })
+
+  it('syncs the local player health into game.health', () => {
+    const scene = new Scene()
+    scene.applySnapshot(baseSnap(scene, {
+      players: [{ id: scene.localPlayerId, x: 0, y: 0.9, z: 0, inventory: [], health: 42 }],
+    }))
+    expect(scene.localPlayer.health).toBe(42)
+    expect(game.health).toBe(42)
+  })
+
+  it('syncs enemy position/health and hides dead ones', () => {
+    const scene = new Scene()
+    const target = scene.enemies[0]
+    scene.applySnapshot(baseSnap(scene, {
+      enemies: scene.enemies.map((e) => (
+        e.id === target.id
+          ? { id: e.id, x: 5, y: 0.3, z: -5, health: 0 }
+          : { id: e.id, x: e.position.x, y: e.position.y, z: e.position.z, health: e.health }
+      )),
+    }))
+    expect(target.position).toEqual({ x: 5, y: 0.3, z: -5 })
+    expect(target.health).toBe(0)
+    expect(target.mesh.visible).toBe(false)
+  })
+
+  it('leaves an unaffected enemy visible', () => {
+    const scene = new Scene()
+    scene.applySnapshot(baseSnap(scene))
+    expect(scene.enemies[0].mesh.visible).toBe(true)
   })
 
   it('syncs node hp/depleted/respawnTimer and hides depleted meshes', () => {

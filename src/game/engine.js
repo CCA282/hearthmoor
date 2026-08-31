@@ -19,6 +19,7 @@ class Engine {
     this._syncTimer = 0
     this._inputTimer = 0
     this._pendingAction = false
+    this._pendingAttack = false
   }
 
   _resize() {
@@ -79,13 +80,15 @@ class Engine {
   // 33ms ticks isn't lost) and applies whatever state the host broadcasts.
   _tickGuest(dt) {
     if (this.input.actionPressed()) this._pendingAction = true
+    if (this.input.attackPressed()) this._pendingAttack = true
 
     this._inputTimer += dt
     if (this._inputTimer >= SYNC_INTERVAL) {
       this._inputTimer = 0
       const dir = this.input.moveVector()
-      sendInput({ mx: dir.x, mz: dir.z, action: this._pendingAction })
+      sendInput({ mx: dir.x, mz: dir.z, action: this._pendingAction, attack: this._pendingAttack })
       this._pendingAction = false
+      this._pendingAttack = false
     }
     this.scene.updateGuestVisuals(dt)
   }
