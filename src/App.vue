@@ -1,10 +1,16 @@
 <script setup>
+import { computed } from 'vue'
 import GameCanvas from './components/GameCanvas.vue'
+import Lobby from './components/Lobby.vue'
+import { netState } from './net/netState.js'
+
+const inGame = computed(() => netState.mode !== null)
 </script>
 
 <template>
   <div class="stage">
-    <GameCanvas />
+    <Lobby />
+    <GameCanvas v-if="inGame" />
   </div>
 </template>
 

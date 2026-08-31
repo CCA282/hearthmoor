@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { startLocalGame } from './helpers.js'
 
 async function playerPos(page) {
   return page.evaluate(() => ({ ...window.__engine.scene.player.position }))
@@ -6,8 +7,7 @@ async function playerPos(page) {
 
 test.describe('Player movement — keyboard', () => {
   test('moving right (D) increases x', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForFunction(() => !!window.__engine?.scene?.player)
+    await startLocalGame(page)
     const before = await playerPos(page)
 
     await page.keyboard.down('KeyD')
@@ -20,8 +20,7 @@ test.describe('Player movement — keyboard', () => {
   })
 
   test('moving forward (W) decreases z', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForFunction(() => !!window.__engine?.scene?.player)
+    await startLocalGame(page)
     const before = await playerPos(page)
 
     await page.keyboard.down('KeyW')
@@ -33,8 +32,7 @@ test.describe('Player movement — keyboard', () => {
   })
 
   test('the camera follows the player', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForFunction(() => !!window.__engine?.scene?.player)
+    await startLocalGame(page)
 
     await page.keyboard.down('KeyD')
     await page.waitForTimeout(300)
@@ -49,8 +47,7 @@ test.describe('Player movement — keyboard', () => {
   })
 
   test('releasing all keys stops the player', async ({ page }) => {
-    await page.goto('/')
-    await page.waitForFunction(() => !!window.__engine?.scene?.player)
+    await startLocalGame(page)
 
     await page.keyboard.down('KeyD')
     await page.waitForTimeout(200)
