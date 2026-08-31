@@ -1,6 +1,10 @@
 import * as THREE from 'three'
 import { Scene } from './scene/Scene.js'
 import { Input } from './input/index.js'
+import { netState } from '../net/netState.js'
+import { broadcastState, sendInput } from '../net/realtime.js'
+
+const SYNC_INTERVAL = 0.033 // ~30Hz, same cadence as hamnet-village
 
 class Engine {
   constructor() {
@@ -12,6 +16,9 @@ class Engine {
     this.last = 0
     this.running = false
     this._resizeObs = null
+    this._syncTimer = 0
+    this._inputTimer = 0
+    this._pendingAction = false
   }
 
   _resize() {
@@ -41,13 +48,50 @@ class Engine {
       this.last = now
       if (dt > 0.05) dt = 0.05
 
-      this.scene.update(dt, this.input)
+      if (netState.mode === 'guest') {
+        this._tickGuest(dt)
+      } else {
+        this.scene.update(dt, this.input)
+        if (netState.mode === 'host') this._tickHost(dt)
+      }
+
       this.renderer.render(this.scene.three, this.scene.camera)
       this.input.endFrame()
 
       this.raf = requestAnimationFrame(loop)
     }
     this.raf = requestAnimationFrame(loop)
+  }
+
+  // Host: broadcast a full state snapshot ~30Hz. The host itself keeps
+  // simulating everyone (its own player from real input, remote players from
+  // their last-received remoteInput) via the normal scene.update() above.
+  _tickHost(dt) {
+    this._syncTimer += dt
+    if (this._syncTimer >= SYNC_INTERVAL) {
+      this._syncTimer = 0
+      broadcastState(this.scene.serializeSnapshot())
+    }
+  }
+
+  // Guest: never simulates locally (docs/spec.md §7 — no client-side
+  // prediction) — just buffers input between sends (so a tap between two
+  // 33ms ticks isn't lost) and applies whatever state the host broadcasts.
+  _tickGuest(dt) {
+    if (this.input.actionPressed()) this._pendingAction = true
+
+    this._inputTimer += dt
+    if (this._inputTimer >= SYNC_INTERVAL) {
+      this._inputTimer = 0
+      const dir = this.input.moveVector()
+      sendInput({ mx: dir.x, mz: dir.z, action: this._pendingAction })
+      this._pendingAction = false
+    }
+    this.scene.updateGuestVisuals(dt)
+  }
+
+  applySnapshot(snap) {
+    this.scene.applySnapshot(snap)
   }
 
   stop() {
