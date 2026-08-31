@@ -1,10 +1,11 @@
 import * as THREE from 'three'
 import { Scene } from './scene/Scene.js'
+import { Input } from './input/index.js'
 
 class Engine {
   constructor() {
     this.scene = new Scene()
-    this.input = null
+    this.input = new Input()
     this.renderer = null
     this.canvas = null
     this.raf = 0

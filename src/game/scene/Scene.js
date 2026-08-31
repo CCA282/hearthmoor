@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { CAMERA_FRUSTUM_SIZE, CAMERA_NEAR, CAMERA_FAR } from '../constants/camera.js'
+import { PLAYER_SPEED } from '../constants/gameplay.js'
 import { cameraPositionFor } from './camera.js'
+import { stepPosition } from './movement.js'
 
 // Semi-isometric fixed-angle camera, low-poly ground + simple lighting/fog —
 // see docs/spec.md §3-4. No renderer here: WebGLRenderer needs a real <canvas>
@@ -15,11 +17,20 @@ export class Scene {
     this._setupLights()
     this._setupGround()
     this._setupHearthMarker()
+    this._setupPlayer()
 
-    // What the camera follows — the player, once it exists (next task).
-    this.cameraTarget = { x: 0, y: 0, z: 0 }
+    this.cameraTarget = this.player.position
     this.camera = this._createCamera()
     this._updateCamera()
+  }
+
+  _setupPlayer() {
+    const geo = new THREE.CapsuleGeometry(0.45, 0.9, 4, 8)
+    const mat = new THREE.MeshLambertMaterial({ color: '#6fa8b8' })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.position.set(3, 0.9, 3)
+    this.three.add(mesh)
+    this.player = { position: { x: 3, y: 0.9, z: 3 }, mesh }
   }
 
   _createCamera() {
@@ -71,7 +82,16 @@ export class Scene {
     this.camera.lookAt(this.cameraTarget.x, this.cameraTarget.y, this.cameraTarget.z)
   }
 
-  update(_dt, _input) {
+  update(dt, input) {
+    if (input) {
+      const dir = input.moveVector()
+      this.player.position = stepPosition(this.player.position, dir, PLAYER_SPEED, dt)
+      this.player.mesh.position.set(this.player.position.x, this.player.position.y, this.player.position.z)
+      if (dir.x !== 0 || dir.z !== 0) {
+        this.player.mesh.rotation.y = Math.atan2(dir.x, dir.z)
+      }
+      this.cameraTarget = this.player.position
+    }
     this._updateCamera()
   }
 }
