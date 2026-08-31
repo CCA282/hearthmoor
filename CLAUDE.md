@@ -16,22 +16,27 @@ movement + edge-detected action/attack buttons, a Lobby (local / create room /
 join room by code), a Prairie-zone resource-gathering loop (harvest trees/rocks
 into a discrete-item per-player inventory, nodes deplete then respawn), **basic
 combat** (2 boars with a simple idle→chase→telegraphed-attack AI, player attack/
-health/death+respawn-at-camp, meat loot on a kill), a HUD showing inventory +
-health bar + a context hint (harvest or attack), and **real host/guest state
-sync** covering all of the above: the host simulates everyone (its own player
-from real input, remote players from their last-received input, all enemies)
-and broadcasts a snapshot ~30Hz; guests never simulate locally (no client-side
+health/death+respawn-at-camp, meat loot on a kill), **a first equipment/crafting
+loop** (a workbench in the Prairie zone, one recipe — 15 wood → `hache_bois` — auto-
+equips into the `weapon` slot on craft, and an equipped weapon adds its
+`damageBonus` on top of the base attack damage, see `equipment.js`/`crafting.js`),
+a HUD showing inventory + health bar + equipped-weapon badge + a context hint
+(harvest/craft/attack), and **real host/guest state sync** covering all of the
+above including equipment: the host simulates everyone (its own player from
+real input, remote players from their last-received input, all enemies) and
+broadcasts a snapshot ~30Hz; guests never simulate locally (no client-side
 prediction, see `docs/spec.md` §7) and just apply whatever the host sends —
 see `Scene.serializeSnapshot`/`applySnapshot`, `engine.js`'s `_tickHost`/`_tickGuest`.
 
 What does **not** exist yet, despite being in `docs/spec.md`: the other 3 zones
-(Forêt sombre, Marais, Montagne), equipment/crafting/weapon tiers, buildings,
-and save/load of real game state (`net/sync.js`'s `saveLocal`/`saveServer` are
-wired but nothing calls them yet — no persistence across sessions, only live
-sync between players currently in the same room). Also not handled yet:
-returning from a `guest` session to the lobby and starting a fresh
-`local`/`host` game — `Lobby.vue`'s guest join path removes `Scene`'s default
-`'local'` player and nothing currently restores it, see the comment there.
+(Forêt sombre, Marais, Montagne), the other 3 weapons and armor/tier progression
+(currently a single weapon, tier 1 of 3, no armor slots at all), buildings, and
+save/load of real game state (`net/sync.js`'s `saveLocal`/`saveServer` are wired
+but nothing calls them yet — no persistence across sessions, only live sync
+between players currently in the same room). Also not handled yet: returning
+from a `guest` session to the lobby and starting a fresh `local`/`host` game —
+`Lobby.vue`'s guest join path removes `Scene`'s default `'local'` player and
+nothing currently restores it, see the comment there.
 
 See `docs/spec.md` for the full v1 design spec and `docs/hamnet-village-tech-foundation.md`
 for the technical patterns reused from `hamnet-village`. Keep this section in
@@ -70,9 +75,10 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
 - Combat: latency-tolerant by design (telegraphed attacks — `ENEMY_ATTACK_WINDUP`
   in `constants/combat.js` — no client-side prediction), same reasoning already
   applied to movement/harvesting, see spec §7. The host-authoritative networking
-  model itself is unchanged from `hamnet-village`. Equipment/weapon tiers not
-  built yet — currently a single fixed attack (`PLAYER_ATTACK_DAMAGE`), no items
-  involved.
+  model itself is unchanged from `hamnet-village`. Equipment/weapon tiers are just
+  getting started — one weapon (`hache_bois`, tier 1 of 3) craftable at a fixed
+  workbench, auto-equips into `equipment.weapon` and adds a flat `damageBonus` on
+  top of `PLAYER_ATTACK_DAMAGE` (see `equipment.js`); no armor slots yet.
 - `net/` (Supabase client, auth, realtime rooms, save/load sync) is reused
   essentially unchanged from `hamnet-village`, just re-prefixed (`hearthmoor:room:`
   topics, `hearthmoor_worlds` table).
@@ -91,7 +97,9 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
 | `src/game/input/keyboard.js`, `gamepad.js` | Pure functions: input state → world-space movement vector + edge-detected action/attack press |
 | `src/game/inventory.js` | Pure, immutable inventory ops (`addItem`/`removeItem`/`totalCount`/`isFull`) over a fixed-size slot array |
 | `src/game/combat.js` | Pure health ops (`applyDamage`/`heal`/`isDead`), bounded to `[0, max]` |
-| `src/game/store.js` | `game` (Vue `reactive`) — the *only* reactive state (inventory mirror, hint text, health/maxHealth), same split as hamnet-village's `game`/`World` |
+| `src/game/equipment.js` | Pure: `attackDamageFor(player)` (base + equipped weapon bonus), `equipItem(equipment, itemId)` |
+| `src/game/crafting.js` | Pure: `canAffordRecipe`/`craftRecipe` over `constants/crafting.js`'s `RECIPES` |
+| `src/game/store.js` | `game` (Vue `reactive`) — the *only* reactive state (inventory mirror, hint text, health/maxHealth, equipment mirror), same split as hamnet-village's `game`/`World` |
 | `src/game/constants/*` | Declarative tuning data (camera, player speed, resource nodes, items, enemy spawns, combat) — no logic |
 | `src/components/GameCanvas.vue` | Mounts the `<canvas>`, calls `engine.start()`/`stop()` |
 | `src/components/Hud.vue` | Reads `game.inventory`/`game.hint`/`game.health`, purely presentational |
