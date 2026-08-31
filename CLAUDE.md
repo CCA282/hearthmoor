@@ -21,22 +21,31 @@ loop** (a workbench in the Prairie zone, one recipe — 15 wood → `hache_bois`
 equips into the `weapon` slot on craft, and an equipped weapon adds its
 `damageBonus` on top of the base attack damage, see `equipment.js`/`crafting.js`),
 a HUD showing inventory + health bar + equipped-weapon badge + a context hint
-(harvest/craft/attack), and **real host/guest state sync** covering all of the
+(harvest/craft/attack), **real host/guest state sync** covering all of the
 above including equipment: the host simulates everyone (its own player from
 real input, remote players from their last-received input, all enemies) and
 broadcasts a snapshot ~30Hz; guests never simulate locally (no client-side
 prediction, see `docs/spec.md` §7) and just apply whatever the host sends —
 see `Scene.serializeSnapshot`/`applySnapshot`, `engine.js`'s `_tickHost`/`_tickGuest`.
+There's also now **persistence for solo/host games**: a Sauvegarder button + a
+2-minute autosave in the HUD, and a Nouvelle partie/Continuer choice in the
+Lobby before starting locally — a save is just a `serializeSnapshot()` payload
+(same shape as the network snapshot, `docs/spec.md` §12) round-tripped through
+`net/sync.js` (localStorage or Postgres depending on `netState.user`, ported
+unchanged from hamnet-village), and `engine.newGame(snapshot?)` is the one
+place that resets to a fresh `Scene` and optionally replays a save onto it.
+There's a Quitter button too, the first way to leave a game and return to the
+Lobby at all.
 
 What does **not** exist yet, despite being in `docs/spec.md`: the other 3 zones
 (Forêt sombre, Marais, Montagne), the other 3 weapons and armor/tier progression
-(currently a single weapon, tier 1 of 3, no armor slots at all), buildings, and
-save/load of real game state (`net/sync.js`'s `saveLocal`/`saveServer` are wired
-but nothing calls them yet — no persistence across sessions, only live sync
-between players currently in the same room). Also not handled yet: returning
-from a `guest` session to the lobby and starting a fresh `local`/`host` game —
-`Lobby.vue`'s guest join path removes `Scene`'s default `'local'` player and
-nothing currently restores it, see the comment there.
+(currently a single weapon, tier 1 of 3, no armor slots at all), buildings, any
+account/login UI (`net/accounts.js` is ported and unit-tested but nothing in
+`src/components/` calls it, so `netState.user` is always null in practice and
+every save currently goes to localStorage — the server path is wired and would
+just start working once a login screen exists), and a way to load a save before
+hosting an online room (only the local-play entry point offers Continuer;
+`createRoom()` always starts fresh).
 
 See `docs/spec.md` for the full v1 design spec and `docs/hamnet-village-tech-foundation.md`
 for the technical patterns reused from `hamnet-village`. Keep this section in
@@ -87,7 +96,7 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
 
 | Path | Role |
 |------|------|
-| `src/game/engine.js` | Singleton: RAF loop over `THREE.WebGLRenderer`, canvas resize, owns the `Input` instance |
+| `src/game/engine.js` | Singleton: RAF loop over `THREE.WebGLRenderer`, canvas resize, owns the `Input` instance, `newGame(snapshot?)` (fresh `Scene`, optionally replays a save) |
 | `src/game/scene/Scene.js` | `Scene` class (Three.js) — camera/ground/lights/fog, multiplayer `players[]` (local + remote, each with inventory/health), resource nodes, enemies, snapshot serialize/apply. Equivalent of hamnet-village's `World.js` |
 | `src/game/scene/camera.js` | Pure camera-follow math (no THREE/DOM) — unit-tested in isolation |
 | `src/game/scene/movement.js` | Pure movement math (combine/clamp input vectors, step position) — unit-tested in isolation |

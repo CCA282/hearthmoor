@@ -68,6 +68,10 @@ function goOnline() { step.value = 'online'; error.value = '' }
 async function createRoom() {
   error.value = ''; busy.value = true
   try {
+    // Reset to a fresh scene first — engine.scene may still be left over from
+    // a previous local/host/guest session (dead enemies, a removed 'local'
+    // player after being a guest...), see engine.newGame().
+    engine.newGame()
     onGuestJoined(({ guestId }) => { engine.scene.addPlayer(guestId) })
     onGuestLeft(({ guestId }) => { engine.scene.removePlayer(guestId) })
     onInput(({ guestId, input }) => { engine.scene.applyRemoteInput(guestId, input) })
@@ -93,11 +97,13 @@ async function joinRoom() {
   if (code.length !== 6) { error.value = 'Code invalide (6 caractères)'; return }
   error.value = ''; busy.value = true
   try {
-    // Guests don't simulate anyone locally (docs/spec.md §7) — the scene's
-    // constructor-created 'local' player is a solo/host-only assumption and
-    // would otherwise linger as an orphaned ghost, since nothing ever removes
-    // a player id that the host never uses. See engine.js/Scene.js for the
-    // rest of the guest sync path (applySnapshot/setLocalPlayerId).
+    // Reset to a fresh scene first (see createRoom() above), then remove its
+    // default 'local' player — guests don't simulate anyone locally (docs/spec.md
+    // §7), so that player is a solo/host-only assumption and would otherwise
+    // linger as an orphaned ghost, since nothing ever removes a player id that
+    // the host never uses. See engine.js/Scene.js for the rest of the guest
+    // sync path (applySnapshot/setLocalPlayerId).
+    engine.newGame()
     engine.scene.removePlayer('local')
 
     onState((snap) => { engine.applySnapshot(snap) })
