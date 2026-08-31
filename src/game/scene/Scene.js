@@ -1,8 +1,11 @@
 import * as THREE from 'three'
 import { CAMERA_FRUSTUM_SIZE, CAMERA_NEAR, CAMERA_FAR } from '../constants/camera.js'
 import { PLAYER_SPEED } from '../constants/gameplay.js'
+import { RESOURCE_NODES, NODE_HP, NODE_YIELD_PER_HIT, HARVEST_RANGE } from '../constants/nodes.js'
 import { cameraPositionFor } from './camera.js'
 import { stepPosition } from './movement.js'
+import { findNearestNode, hitNode, tickNodeRespawn } from './resources.js'
+import { createInventory, addItem } from '../inventory.js'
 
 // Semi-isometric fixed-angle camera, low-poly ground + simple lighting/fog —
 // see docs/spec.md §3-4. No renderer here: WebGLRenderer needs a real <canvas>
@@ -18,6 +21,10 @@ export class Scene {
     this._setupGround()
     this._setupHearthMarker()
     this._setupPlayer()
+    this._setupNodes()
+
+    this.inventory = createInventory()
+    this.nearestNode = null
 
     this.cameraTarget = this.player.position
     this.camera = this._createCamera()
@@ -76,6 +83,64 @@ export class Scene {
     this.three.add(marker)
   }
 
+  _setupNodes() {
+    this.nodes = RESOURCE_NODES.map((def) => {
+      const mesh = def.kind === 'tree' ? this._buildTreeMesh() : this._buildRockMesh()
+      mesh.position.set(def.x, 0, def.z)
+      this.three.add(mesh)
+      return { ...def, hp: NODE_HP, depleted: false, respawnTimer: 0, mesh }
+    })
+  }
+
+  _buildTreeMesh() {
+    const group = new THREE.Group()
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.24, 1.2, 6),
+      new THREE.MeshLambertMaterial({ color: '#5a4632' }),
+    )
+    trunk.position.y = 0.6
+    const canopy = new THREE.Mesh(
+      new THREE.ConeGeometry(0.9, 1.8, 7),
+      new THREE.MeshLambertMaterial({ color: '#3f6b4a' }),
+    )
+    canopy.position.y = 1.9
+    group.add(trunk, canopy)
+    return group
+  }
+
+  _buildRockMesh() {
+    const mesh = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(0.6, 0),
+      new THREE.MeshLambertMaterial({ color: '#8a8a86' }),
+    )
+    mesh.position.y = 0.45
+    return mesh
+  }
+
+  // One hit: yields an item, depletes the node after NODE_HP hits. The actual
+  // hp/depleted/respawnTimer transitions are pure (resources.js) — this just
+  // applies the result and syncs the THREE mesh + inventory.
+  _harvest(node) {
+    const idx = this.nodes.indexOf(node)
+    const updated = hitNode(node)
+    this.nodes[idx] = updated
+    updated.mesh.visible = !updated.depleted
+    if (updated.depleted) this.nearestNode = null
+
+    const { inventory } = addItem(this.inventory, node.item, NODE_YIELD_PER_HIT)
+    this.inventory = inventory
+  }
+
+  _updateNodes(dt) {
+    for (let i = 0; i < this.nodes.length; i++) {
+      const updated = tickNodeRespawn(this.nodes[i], dt)
+      if (updated !== this.nodes[i]) {
+        this.nodes[i] = updated
+        updated.mesh.visible = !updated.depleted
+      }
+    }
+  }
+
   _updateCamera() {
     const pos = cameraPositionFor(this.cameraTarget)
     this.camera.position.set(pos.x, pos.y, pos.z)
@@ -83,6 +148,8 @@ export class Scene {
   }
 
   update(dt, input) {
+    this._updateNodes(dt)
+
     if (input) {
       const dir = input.moveVector()
       this.player.position = stepPosition(this.player.position, dir, PLAYER_SPEED, dt)
@@ -91,6 +158,11 @@ export class Scene {
         this.player.mesh.rotation.y = Math.atan2(dir.x, dir.z)
       }
       this.cameraTarget = this.player.position
+
+      this.nearestNode = findNearestNode(this.nodes, this.player.position, HARVEST_RANGE)
+      if (this.nearestNode && input.actionPressed()) {
+        this._harvest(this.nearestNode)
+      }
     }
     this._updateCamera()
   }
