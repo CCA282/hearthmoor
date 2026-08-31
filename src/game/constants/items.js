@@ -4,4 +4,5 @@
 export const ITEMS = {
   wood: { name: 'Bois', maxStack: 20 },
   stone: { name: 'Pierre', maxStack: 20 },
+  meat: { name: 'Viande', maxStack: 10 },
 }

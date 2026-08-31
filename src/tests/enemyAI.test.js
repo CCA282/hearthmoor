@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { stepEnemy } from '../game/scene/enemyAI.js'
+import { stepEnemy, findNearestEnemy } from '../game/scene/enemyAI.js'
 import {
   ENEMY_AGGRO_RANGE, ENEMY_ATTACK_RANGE, ENEMY_ATTACK_WINDUP, ENEMY_ATTACK_COOLDOWN, ENEMY_CHASE_SPEED,
+  ENEMY_MAX_HEALTH,
 } from '../game/constants/combat.js'
 
 function enemy(overrides = {}) {
@@ -135,5 +136,32 @@ describe('stepEnemy — immutability', () => {
     const frozen = JSON.parse(JSON.stringify(original))
     stepEnemy(original, [player('p1', 10, 0)], 1)
     expect(original).toEqual(frozen)
+  })
+})
+
+describe('findNearestEnemy', () => {
+  function livingEnemy(id, x, z) {
+    return { id, position: { x, y: 0, z }, health: ENEMY_MAX_HEALTH }
+  }
+
+  it('returns null when nothing is within range', () => {
+    expect(findNearestEnemy([livingEnemy('e1', 10, 10)], { x: 0, z: 0 }, 2)).toBeNull()
+  })
+
+  it('returns the closest of several enemies within range', () => {
+    const enemies = [livingEnemy('far', 1.8, 0), livingEnemy('near', 0.5, 0)]
+    expect(findNearestEnemy(enemies, { x: 0, z: 0 }, 2)?.id).toBe('near')
+  })
+
+  it('ignores dead enemies even if closer', () => {
+    const enemies = [
+      { ...livingEnemy('dead', 0.2, 0), health: 0 },
+      livingEnemy('alive', 1.5, 0),
+    ]
+    expect(findNearestEnemy(enemies, { x: 0, z: 0 }, 2)?.id).toBe('alive')
+  })
+
+  it('is inclusive at the exact range boundary', () => {
+    expect(findNearestEnemy([livingEnemy('edge', 2, 0)], { x: 0, z: 0 }, 2)?.id).toBe('edge')
   })
 })

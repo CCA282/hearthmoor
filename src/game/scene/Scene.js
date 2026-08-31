@@ -2,13 +2,21 @@ import * as THREE from 'three'
 import { CAMERA_FRUSTUM_SIZE, CAMERA_NEAR, CAMERA_FAR } from '../constants/camera.js'
 import { PLAYER_SPEED } from '../constants/gameplay.js'
 import { RESOURCE_NODES, NODE_HP, NODE_YIELD_PER_HIT, HARVEST_RANGE } from '../constants/nodes.js'
+import { ENEMY_SPAWNS } from '../constants/enemies.js'
+import {
+  PLAYER_MAX_HEALTH, PLAYER_ATTACK_DAMAGE, PLAYER_ATTACK_RANGE, PLAYER_ATTACK_COOLDOWN,
+  ENEMY_MAX_HEALTH, ENEMY_ATTACK_DAMAGE, ENEMY_RESPAWN_TIME,
+} from '../constants/combat.js'
 import { cameraPositionFor } from './camera.js'
 import { stepPosition } from './movement.js'
 import { findNearestNode, hitNode, tickNodeRespawn } from './resources.js'
+import { stepEnemy, findNearestEnemy } from './enemyAI.js'
 import { createInventory, addItem } from '../inventory.js'
+import { applyDamage, isDead } from '../combat.js'
 import { game } from '../store.js'
 
 const HARVEST_HINT = 'Espace / A pour récolter'
+const ATTACK_HINT = 'F / X pour attaquer'
 const LOCAL_PLAYER_ID = 'local'
 const LOCAL_PLAYER_COLOR = '#6fa8b8'
 const REMOTE_PLAYER_COLOR = '#c8895a'
@@ -34,12 +42,14 @@ export class Scene {
     this._setupGround()
     this._setupHearthMarker()
     this._setupNodes()
+    this._setupEnemies()
 
     this.players = []
     this.localPlayerId = LOCAL_PLAYER_ID
     this.addPlayer(LOCAL_PLAYER_ID, SPAWN_POSITION)
 
     this.nearestNode = null
+    this.nearestEnemy = null
 
     this.cameraTarget = this.localPlayer.position
     this.camera = this._createCamera()
@@ -65,10 +75,21 @@ export class Scene {
     mesh.position.set(position.x, position.y, position.z)
     this.three.add(mesh)
 
-    const player = { id, position: { ...position }, mesh, inventory: createInventory(), remoteInput: null }
+    const player = {
+      id, position: { ...position }, mesh,
+      inventory: createInventory(),
+      health: PLAYER_MAX_HEALTH, maxHealth: PLAYER_MAX_HEALTH, attackCooldown: 0,
+      remoteInput: null,
+    }
     this.players.push(player)
-    if (id === this.localPlayerId) game.inventory = player.inventory
+    if (id === this.localPlayerId) this._syncLocalHudFromPlayer(player)
     return player
+  }
+
+  _syncLocalHudFromPlayer(player) {
+    game.inventory = player.inventory
+    game.health = player.health
+    game.maxHealth = player.maxHealth
   }
 
   removePlayer(id) {
@@ -215,6 +236,44 @@ export class Scene {
     return mesh
   }
 
+  _setupEnemies() {
+    this.enemies = ENEMY_SPAWNS.map((def) => {
+      const spawnPosition = { x: def.x, y: 0.3, z: def.z }
+      const mesh = this._buildEnemyMesh()
+      mesh.position.set(spawnPosition.x, spawnPosition.y, spawnPosition.z)
+      this.three.add(mesh)
+      return {
+        id: def.id,
+        position: { ...spawnPosition },
+        spawnPosition,
+        health: ENEMY_MAX_HEALTH,
+        maxHealth: ENEMY_MAX_HEALTH,
+        state: 'idle',
+        stateTimer: 0,
+        targetId: null,
+        respawnTimer: 0,
+        mesh,
+      }
+    })
+  }
+
+  // Placeholder "sanglier" — body + head, low-poly boxes. Real fauna models
+  // land later, see docs/hamnet-village-tech-foundation.md §6.
+  _buildEnemyMesh() {
+    const group = new THREE.Group()
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.55, 0.6),
+      new THREE.MeshLambertMaterial({ color: '#7a4a34' }),
+    )
+    const head = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.4, 0.45),
+      new THREE.MeshLambertMaterial({ color: '#6a3f2c' }),
+    )
+    head.position.set(0.7, 0, 0)
+    group.add(body, head)
+    return group
+  }
+
   _movePlayer(player, dir, dt) {
     player.position = stepPosition(player.position, dir, PLAYER_SPEED, dt)
     player.mesh.position.set(player.position.x, player.position.y, player.position.z)
@@ -236,6 +295,14 @@ export class Scene {
     return pressed
   }
 
+  // Same one-shot consumption, for the attack button (task 21 wires the
+  // guest side to actually send `attack` in its input payload).
+  _consumeRemoteAttack(player) {
+    const pressed = !!player.remoteInput?.attack
+    if (pressed && player.remoteInput) player.remoteInput.attack = false
+    return pressed
+  }
+
   // One hit: yields an item, depletes the node after NODE_HP hits. The actual
   // hp/depleted/respawnTimer transitions are pure (resources.js) — this just
   // applies the result and syncs the THREE mesh + inventory.
@@ -248,7 +315,79 @@ export class Scene {
 
     const { inventory } = addItem(player.inventory, node.item, NODE_YIELD_PER_HIT)
     player.inventory = inventory
-    if (player.id === this.localPlayerId) game.inventory = player.inventory
+    if (player.id === this.localPlayerId) this._syncLocalHudFromPlayer(player)
+  }
+
+  // Player → enemy: deals damage, and on the killing blow, removes the enemy
+  // (mesh hidden, respawn timer starts — see _updateEnemies) and drops a
+  // small amount of loot into the attacker's inventory.
+  _attackFor(player, enemy) {
+    enemy.health = applyDamage(enemy.health, PLAYER_ATTACK_DAMAGE)
+    if (!isDead(enemy.health)) return
+
+    enemy.mesh.visible = false
+    enemy.state = 'idle'
+    enemy.targetId = null
+    enemy.respawnTimer = ENEMY_RESPAWN_TIME
+    if (this.nearestEnemy === enemy) this.nearestEnemy = null
+
+    const { inventory } = addItem(player.inventory, 'meat', 1)
+    player.inventory = inventory
+    if (player.id === this.localPlayerId) this._syncLocalHudFromPlayer(player)
+  }
+
+  // Enemy → player: deals damage; a lethal hit respawns the player at camp
+  // with full health (no punishing loss — see docs/spec.md's overall tone).
+  _damagePlayer(player, amount) {
+    player.health = applyDamage(player.health, amount)
+    if (player.id === this.localPlayerId) game.health = player.health
+    if (isDead(player.health)) this._respawnPlayer(player)
+  }
+
+  _respawnPlayer(player) {
+    player.health = player.maxHealth
+    player.position = { ...SPAWN_POSITION }
+    player.mesh.position.set(SPAWN_POSITION.x, SPAWN_POSITION.y, SPAWN_POSITION.z)
+    if (player.id === this.localPlayerId) game.health = player.health
+  }
+
+  // Host/solo only — guests never run this (no enemies in their local Scene
+  // until task 21 adds them to the snapshot). Ticks AI for living enemies,
+  // applies damage on a landed hit, and respawns dead ones after a delay.
+  _updateEnemies(dt) {
+    const playerRefs = this.players.map((p) => ({ id: p.id, position: p.position }))
+    for (let i = 0; i < this.enemies.length; i++) {
+      const enemy = this.enemies[i]
+
+      if (isDead(enemy.health)) {
+        const respawnTimer = enemy.respawnTimer - dt
+        if (respawnTimer > 0) {
+          this.enemies[i] = { ...enemy, respawnTimer }
+          continue
+        }
+        const respawned = {
+          ...enemy,
+          health: enemy.maxHealth,
+          position: { ...enemy.spawnPosition },
+          state: 'idle',
+          targetId: null,
+          respawnTimer: 0,
+        }
+        respawned.mesh.position.set(respawned.position.x, respawned.position.y, respawned.position.z)
+        respawned.mesh.visible = true
+        this.enemies[i] = respawned
+        continue
+      }
+
+      const updated = stepEnemy(enemy, playerRefs, dt)
+      updated.mesh.position.set(updated.position.x, updated.position.y, updated.position.z)
+      this.enemies[i] = updated
+
+      if (updated.justAttacked && updated.targetId) {
+        const target = this.findPlayer(updated.targetId)
+        if (target) this._damagePlayer(target, ENEMY_ATTACK_DAMAGE)
+      }
+    }
   }
 
   _updateNodes(dt) {
@@ -271,6 +410,7 @@ export class Scene {
   // applySnapshot()/updateGuestVisuals() instead.
   update(dt, input) {
     this._updateNodes(dt)
+    this._updateEnemies(dt)
 
     for (const player of this.players) {
       const isLocal = player.id === this.localPlayerId
@@ -279,14 +419,23 @@ export class Scene {
       const dir = isLocal ? input.moveVector() : this._remoteMoveVector(player)
       this._movePlayer(player, dir, dt)
 
-      const nearest = findNearestNode(this.nodes, player.position, HARVEST_RANGE)
+      const nearestNode = findNearestNode(this.nodes, player.position, HARVEST_RANGE)
+      const nearestEnemy = findNearestEnemy(this.enemies, player.position, PLAYER_ATTACK_RANGE)
       if (isLocal) {
-        this.nearestNode = nearest
-        game.hint = nearest ? HARVEST_HINT : ''
+        this.nearestNode = nearestNode
+        this.nearestEnemy = nearestEnemy
+        game.hint = nearestNode ? HARVEST_HINT : nearestEnemy ? ATTACK_HINT : ''
       }
 
       const actionPressed = isLocal ? input.actionPressed() : this._consumeRemoteAction(player)
-      if (nearest && actionPressed) this._harvestFor(player, nearest)
+      if (nearestNode && actionPressed) this._harvestFor(player, nearestNode)
+
+      player.attackCooldown = Math.max(0, player.attackCooldown - dt)
+      const attackPressed = isLocal ? input.attackPressed() : this._consumeRemoteAttack(player)
+      if (nearestEnemy && attackPressed && player.attackCooldown <= 0) {
+        this._attackFor(player, nearestEnemy)
+        player.attackCooldown = PLAYER_ATTACK_COOLDOWN
+      }
     }
 
     if (this.localPlayer) this.cameraTarget = this.localPlayer.position

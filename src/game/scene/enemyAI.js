@@ -2,6 +2,7 @@ import {
   ENEMY_AGGRO_RANGE, ENEMY_ATTACK_RANGE, ENEMY_ATTACK_WINDUP,
   ENEMY_ATTACK_COOLDOWN, ENEMY_CHASE_SPEED,
 } from '../constants/combat.js'
+import { isDead } from '../combat.js'
 
 // Loses aggro once the target strays this much further than the range that
 // triggered it — a little hysteresis so an enemy doesn't flicker chase/idle
@@ -80,4 +81,21 @@ export function stepEnemy(enemy, players, dt) {
     return { ...enemy, state: 'chase', targetId: near.player.id, justAttacked: false }
   }
   return { ...enemy, justAttacked: false }
+}
+
+// Pure — closest *living* enemy within range, or null. Same shape/rationale
+// as resources.js's findNearestNode (used for both attack targeting and the
+// local player's "F to attack" hint).
+export function findNearestEnemy(enemies, playerPos, range) {
+  let best = null
+  let bestDist = range
+  for (const e of enemies) {
+    if (isDead(e.health)) continue
+    const d = dist(e.position, playerPos)
+    if (d <= bestDist) {
+      bestDist = d
+      best = e
+    }
+  }
+  return best
 }
