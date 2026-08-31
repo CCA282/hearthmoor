@@ -11,15 +11,18 @@ as `hamnet-village`/`cine-planner`, but a separate concern (no shared table).
 **Early foundation, not yet a game.** What exists and works: project scaffold,
 `net/` layer (Supabase client/auth/realtime rooms/generic save-load), a minimal
 Three.js scene (semi-isometric camera, ground, fog, lighting), keyboard+gamepad
-player movement, and a Lobby (local / create room / join room by code).
+player movement + an edge-detected action button, a Lobby (local / create room /
+join room by code), a Prairie-zone resource-gathering loop (harvest trees/rocks
+into a discrete-item inventory, nodes deplete then respawn), and a HUD showing
+the inventory + a harvest hint.
 
-What does **not** exist yet, despite being in `docs/spec.md`: zones, combat,
-inventory/equipment, crafting, buildings, any actual scene state sync between
-host/guest (rooms connect via Presence but each client currently renders its own
-unsynced local scene), and save/load of real game state (`net/sync.js`'s
-`saveLocal`/`saveServer` are wired but nothing calls them yet — there's no
-`serializeWorld`/`applyWorldState` equivalent, deferred until there's meaningful
-state to persist).
+What does **not** exist yet, despite being in `docs/spec.md`: the other 3 zones
+(Forêt sombre, Marais, Montagne), combat, equipment/crafting, buildings, any
+actual scene state sync between host/guest (rooms connect via Presence but each
+client currently renders its own unsynced local scene), and save/load of real
+game state (`net/sync.js`'s `saveLocal`/`saveServer` are wired but nothing calls
+them yet — there's no `serializeWorld`/`applyWorldState` equivalent, deferred
+until the state above is worth persisting across sessions).
 
 See `docs/spec.md` for the full v1 design spec and `docs/hamnet-village-tech-foundation.md`
 for the technical patterns reused from `hamnet-village`. Keep this section in
@@ -70,10 +73,14 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
 | `src/game/scene/Scene.js` | `Scene` class (Three.js) — camera/ground/lights/fog setup + player mesh, equivalent of hamnet-village's `World.js` |
 | `src/game/scene/camera.js` | Pure camera-follow math (no THREE/DOM) — unit-tested in isolation |
 | `src/game/scene/movement.js` | Pure movement math (combine/clamp input vectors, step position) — unit-tested in isolation |
+| `src/game/scene/resources.js` | Pure node logic: `findNearestNode`, `hitNode`, `tickNodeRespawn` — unit-tested in isolation |
 | `src/game/input/index.js` | `Input` class — DOM/Gamepad API wiring only, delegates math to `keyboard.js`/`gamepad.js` |
-| `src/game/input/keyboard.js`, `gamepad.js` | Pure functions: input state → world-space movement vector |
-| `src/game/constants/*` | Declarative tuning data (camera offset/frustum, player speed) — no logic |
+| `src/game/input/keyboard.js`, `gamepad.js` | Pure functions: input state → world-space movement vector + edge-detected action press |
+| `src/game/inventory.js` | Pure, immutable inventory ops (`addItem`/`removeItem`/`totalCount`/`isFull`) over a fixed-size slot array |
+| `src/game/store.js` | `game` (Vue `reactive`) — the *only* reactive state (inventory mirror, hint text), same split as hamnet-village's `game`/`World` |
+| `src/game/constants/*` | Declarative tuning data (camera, player speed, resource nodes, items) — no logic |
 | `src/components/GameCanvas.vue` | Mounts the `<canvas>`, calls `engine.start()`/`stop()` |
+| `src/components/Hud.vue` | Reads `game.inventory`/`game.hint`, purely presentational |
 | `src/components/Lobby.vue` | Home screen: pseudo, local mode, create/join room |
 | `src/net/*` | Supabase client, auth, room realtime relay (`hearthmoor:room:` prefix), generic save/load — ported from `hamnet-village` |
 
