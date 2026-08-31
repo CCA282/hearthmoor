@@ -62,6 +62,32 @@ export class Scene {
     this._updateCamera()
   }
 
+  // Low-poly humanoid silhouette: capsule body + faceted head, sharing a
+  // single material so recoloring (setLocalPlayerId, the join race) only
+  // needs to touch one color — see `mesh.userData.bodyMaterial`. A small dark
+  // "nose" box marks facing, since a bare capsule gives no visual cue when it
+  // spins to face movement direction (see _movePlayer's rotation.y).
+  _buildPlayerMesh(color) {
+    const group = new THREE.Group()
+    const bodyMaterial = new THREE.MeshLambertMaterial({ color })
+
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.5, 4, 8), bodyMaterial)
+    body.position.y = -0.33
+
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.26, 0), bodyMaterial)
+    head.position.y = 0.5
+
+    const nose = new THREE.Mesh(
+      new THREE.BoxGeometry(0.12, 0.12, 0.22),
+      new THREE.MeshLambertMaterial({ color: '#2a2320' }),
+    )
+    nose.position.set(0, 0.5, 0.3)
+
+    group.add(body, head, nose)
+    group.userData.bodyMaterial = bodyMaterial
+    return group
+  }
+
   get localPlayer() {
     return this.findPlayer(this.localPlayerId)
   }
@@ -74,10 +100,8 @@ export class Scene {
     const existing = this.findPlayer(id)
     if (existing) return existing
 
-    const geo = new THREE.CapsuleGeometry(0.45, 0.9, 4, 8)
     const color = id === this.localPlayerId ? LOCAL_PLAYER_COLOR : REMOTE_PLAYER_COLOR
-    const mat = new THREE.MeshLambertMaterial({ color })
-    const mesh = new THREE.Mesh(geo, mat)
+    const mesh = this._buildPlayerMesh(color)
     mesh.position.set(position.x, position.y, position.z)
     this.three.add(mesh)
 
@@ -115,7 +139,7 @@ export class Scene {
   setLocalPlayerId(id) {
     this.localPlayerId = id
     const player = this.findPlayer(id)
-    if (player) player.mesh.material.color.set(LOCAL_PLAYER_COLOR)
+    if (player) player.mesh.userData.bodyMaterial.color.set(LOCAL_PLAYER_COLOR)
   }
 
   // Host: full snapshot broadcast to guests (~30Hz, see engine.js task 14) —
@@ -203,11 +227,17 @@ export class Scene {
     this.camera.updateProjectionMatrix()
   }
 
+  // Hemisphere light (cold sky / warm ground) replaces a flat ambient for a
+  // more nordic-moor color grade. No shadows: a shadow-casting light needs
+  // its shadow map redrawn every frame anyway (things move every frame
+  // regardless), and that cost was enough to slow the render loop under
+  // load — which throttles simulated game time too (see engine.js's dt
+  // clamp), breaking attack-timing e2e tests. Not worth it for this scale.
   _setupLights() {
-    const ambient = new THREE.AmbientLight('#8fa8ad', 0.7)
-    const sun = new THREE.DirectionalLight('#fff3d6', 1.1)
+    const hemi = new THREE.HemisphereLight('#bcd6e0', '#3a2f22', 0.65)
+    const sun = new THREE.DirectionalLight('#fff3d6', 1.15)
     sun.position.set(8, 14, 6)
-    this.three.add(ambient, sun)
+    this.three.add(hemi, sun)
   }
 
   _setupGround() {
@@ -218,15 +248,33 @@ export class Scene {
     this.three.add(ground)
   }
 
-  // Temporary visual anchor at the camp's spawn point (0,0,0) — placeholder
-  // for the real hearth/campfire prop, useful in the meantime to eyeball that
-  // the ground/camera/lighting are actually oriented correctly.
+  // A small campfire at the camp's spawn point (0,0,0) — crossed logs, an
+  // unlit (MeshBasicMaterial, ignores scene lighting so it actually reads as
+  // "glowing") flame cone, and a warm PointLight for ambiance.
   _setupHearthMarker() {
-    const geo = new THREE.ConeGeometry(0.8, 1.6, 6)
-    const mat = new THREE.MeshLambertMaterial({ color: '#e8974a' })
-    const marker = new THREE.Mesh(geo, mat)
-    marker.position.set(0, 0.8, 0)
-    this.three.add(marker)
+    const group = new THREE.Group()
+    const logMat = new THREE.MeshLambertMaterial({ color: '#4a3524' })
+    const logGeo = new THREE.CylinderGeometry(0.05, 0.06, 0.85, 6)
+    const logs = [0, Math.PI / 4, -Math.PI / 4].map((yRot) => {
+      const log = new THREE.Mesh(logGeo, logMat)
+      log.rotation.z = Math.PI / 2
+      log.rotation.y = yRot
+      log.position.y = 0.07
+      return log
+    })
+
+    const flame = new THREE.Mesh(
+      new THREE.ConeGeometry(0.24, 0.55, 6),
+      new THREE.MeshBasicMaterial({ color: '#ffb35c' }),
+    )
+    flame.position.y = 0.42
+
+    const glow = new THREE.PointLight('#ffae55', 1.4, 8, 2)
+    glow.position.y = 0.6
+
+    group.add(...logs, flame, glow)
+    this.three.add(group)
+    this.hearthMarker = group
   }
 
   _setupNodes() {
@@ -284,20 +332,49 @@ export class Scene {
     })
   }
 
-  // Placeholder "sanglier" — body + head, low-poly boxes. Real fauna models
-  // land later, see docs/hamnet-village-tech-foundation.md §6.
+  // Low-poly "sanglier" — boxy body/head/snout/ears/tusks/legs. Real fauna
+  // models land later, see docs/hamnet-village-tech-foundation.md §6.
   _buildEnemyMesh() {
     const group = new THREE.Group()
-    const body = new THREE.Mesh(
-      new THREE.BoxGeometry(1.1, 0.55, 0.6),
-      new THREE.MeshLambertMaterial({ color: '#7a4a34' }),
-    )
-    const head = new THREE.Mesh(
-      new THREE.BoxGeometry(0.45, 0.4, 0.45),
-      new THREE.MeshLambertMaterial({ color: '#6a3f2c' }),
-    )
-    head.position.set(0.7, 0, 0)
-    group.add(body, head)
+    const bodyMat = new THREE.MeshLambertMaterial({ color: '#7a4a34' })
+    const darkMat = new THREE.MeshLambertMaterial({ color: '#5a3624' })
+    const tuskMat = new THREE.MeshLambertMaterial({ color: '#e8dfc8' })
+
+    // Local y offsets keep the legs' bottom at y ≈ -0.3, matching the
+    // ENEMY_SPAWNS ground offset (_setupEnemies positions this group at
+    // world y=0.3) so the boar stands on the ground rather than floating.
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.55, 0.6), bodyMat)
+    body.position.y = 0.27
+
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.4, 0.45), darkMat)
+    head.position.set(0.7, 0.29, 0)
+
+    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.2), darkMat)
+    snout.position.set(0.95, 0.21, 0)
+
+    const earGeo = new THREE.ConeGeometry(0.1, 0.18, 4)
+    const earL = new THREE.Mesh(earGeo, darkMat)
+    earL.position.set(0.62, 0.53, 0.16)
+    const earR = new THREE.Mesh(earGeo, darkMat)
+    earR.position.set(0.62, 0.53, -0.16)
+
+    const tuskGeo = new THREE.BoxGeometry(0.05, 0.05, 0.14)
+    const tuskL = new THREE.Mesh(tuskGeo, tuskMat)
+    tuskL.position.set(0.98, 0.13, 0.12)
+    const tuskR = new THREE.Mesh(tuskGeo, tuskMat)
+    tuskR.position.set(0.98, 0.13, -0.12)
+
+    const legGeo = new THREE.BoxGeometry(0.12, 0.3, 0.12)
+    const legOffsets = [
+      [0.4, 0.22], [0.4, -0.22], [-0.4, 0.22], [-0.4, -0.22],
+    ]
+    const legs = legOffsets.map(([x, z]) => {
+      const leg = new THREE.Mesh(legGeo, darkMat)
+      leg.position.set(x, -0.15, z)
+      return leg
+    })
+
+    group.add(body, head, snout, earL, earR, tuskL, tuskR, ...legs)
     return group
   }
 

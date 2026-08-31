@@ -37,9 +37,9 @@ test.describe('HUD', () => {
 
     await press(page, 'Space')
 
-    await expect(page.locator('.inventory .slot')).toContainText('Pierre × 1')
+    await expect(page.locator('.chip[title="Pierre"] .chip-count')).toContainText('1')
 
     await press(page, 'Space')
-    await expect(page.locator('.inventory .slot')).toContainText('Pierre × 2')
+    await expect(page.locator('.chip[title="Pierre"] .chip-count')).toContainText('2')
   })
 })

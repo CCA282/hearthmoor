@@ -70,21 +70,39 @@ function quitToMenu() {
 <template>
   <div class="hud">
     <div class="inventory" v-if="stacks.length">
-      <div class="slot" v-for="(s, i) in stacks" :key="i">
-        {{ ITEMS[s.itemId].name }} × {{ s.count }}
+      <div class="inv-label">Inventaire</div>
+      <div class="inv-grid">
+        <div class="chip" v-for="(s, i) in stacks" :key="i" :title="ITEMS[s.itemId].name">
+          <span class="chip-icon">{{ ITEMS[s.itemId].icon }}</span>
+          <span class="chip-count">{{ s.count }}</span>
+        </div>
       </div>
     </div>
-    <div class="health-bar">
-      <div class="health-fill" :style="{ width: healthPct + '%' }" />
-      <span class="health-label">{{ Math.ceil(game.health) }} / {{ game.maxHealth }}</span>
+
+    <div class="status">
+      <div class="health-bar" :class="{ low: healthPct <= 30 }">
+        <span class="health-icon">❤️</span>
+        <div class="health-track">
+          <div class="health-fill" :style="{ width: healthPct + '%' }" />
+        </div>
+        <span class="health-label">{{ Math.ceil(game.health) }} / {{ game.maxHealth }}</span>
+      </div>
+      <div class="equipped" v-if="equippedWeaponName">
+        <span class="chip-icon">{{ ITEMS[game.equipment.weapon].icon }}</span>
+        {{ equippedWeaponName }}
+      </div>
     </div>
-    <div class="equipped" v-if="equippedWeaponName">🪓 {{ equippedWeaponName }}</div>
+
     <div class="hint" v-if="game.hint">{{ game.hint }}</div>
+
     <div class="menu-bar">
       <button class="menu-btn" v-if="canSave" @pointerdown="triggerSave">💾 Sauvegarder</button>
-      <button class="menu-btn" @pointerdown="quitToMenu">🚪 Quitter</button>
+      <button class="menu-btn quit" @pointerdown="quitToMenu">🚪 Quitter</button>
     </div>
-    <div class="flash" v-if="flashMsg">{{ flashMsg }}</div>
+
+    <transition name="flash-pop">
+      <div class="flash" v-if="flashMsg">{{ flashMsg }}</div>
+    </transition>
   </div>
 </template>
 
@@ -94,6 +112,7 @@ function quitToMenu() {
   inset: 0;
   pointer-events: none;
   z-index: 10;
+  font-family: inherit;
 }
 
 .inventory {
@@ -102,29 +121,87 @@ function quitToMenu() {
   left: 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  background: rgba(18, 24, 28, 0.72);
-  padding: 10px 14px;
-  border-radius: 10px;
+  gap: 6px;
+  background: linear-gradient(180deg, rgba(29, 42, 46, 0.82), rgba(18, 24, 28, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  padding: 10px 12px;
+  border-radius: 14px;
+  backdrop-filter: blur(2px);
 }
-.slot {
-  color: var(--moor-ink);
-  font-weight: 700;
-  font-size: 13px;
+.inv-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--moor-ink-soft);
+  padding: 0 2px;
 }
-
-.health-bar {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 160px;
-  height: 24px;
-  background: rgba(18, 24, 28, 0.72);
-  border-radius: 999px;
-  overflow: hidden;
+.inv-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.chip {
+  position: relative;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--moor-panel-dark);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 9px;
+  font-size: 18px;
+}
+.chip-icon { line-height: 1; }
+.chip-count {
+  position: absolute;
+  bottom: -3px;
+  right: -3px;
+  min-width: 16px;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  color: #fff;
+  background: var(--moor-fire);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.status {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.health-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 190px;
+  height: 30px;
+  background: linear-gradient(180deg, rgba(29, 42, 46, 0.82), rgba(18, 24, 28, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  border-radius: 999px;
+  padding: 0 10px;
+}
+.health-bar.low .health-fill { animation: pulse-low 1s ease-in-out infinite; }
+.health-icon { font-size: 13px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5)); }
+.health-track {
+  position: relative;
+  flex: 1;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 .health-fill {
   position: absolute;
@@ -133,36 +210,40 @@ function quitToMenu() {
   transition: width 0.15s;
 }
 .health-label {
-  position: relative;
   font-size: 11px;
   font-weight: 800;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  color: var(--moor-ink);
+  white-space: nowrap;
 }
 
 .equipped {
-  position: absolute;
-  top: 48px;
-  right: 16px;
-  background: rgba(18, 24, 28, 0.72);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(18, 24, 28, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--moor-ink);
   font-weight: 700;
   font-size: 12px;
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-radius: 999px;
 }
+.equipped .chip-icon { font-size: 14px; }
 
 .hint {
   position: absolute;
   bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(18, 24, 28, 0.72);
+  background: rgba(18, 24, 28, 0.82);
+  border: 1px solid rgba(232, 151, 74, 0.35);
   color: var(--moor-fire);
   font-weight: 700;
   font-size: 13px;
   padding: 8px 16px;
   border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  animation: hint-in 0.15s ease-out;
 }
 
 .menu-bar {
@@ -177,23 +258,41 @@ function quitToMenu() {
   padding: 8px 14px;
   font-size: 12px;
   font-weight: 700;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 999px;
-  background: rgba(18, 24, 28, 0.72);
+  background: rgba(18, 24, 28, 0.78);
   color: var(--moor-ink);
   cursor: pointer;
+  transition: transform 0.08s, background 0.12s;
 }
-.menu-btn:hover { background: rgba(18, 24, 28, 0.9); }
+.menu-btn:hover { background: rgba(18, 24, 28, 0.95); transform: translateY(-1px); }
+.menu-btn:active { transform: translateY(1px); }
+.menu-btn.quit:hover { color: #e0736a; }
 
 .flash {
   position: absolute;
   top: 80px;
   right: 16px;
-  background: rgba(18, 24, 28, 0.85);
+  background: rgba(18, 24, 28, 0.9);
+  border: 1px solid rgba(232, 151, 74, 0.35);
   color: var(--moor-fire);
   font-weight: 700;
   font-size: 12px;
   padding: 8px 14px;
   border-radius: 999px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.flash-pop-enter-active { transition: opacity 0.15s, transform 0.15s; }
+.flash-pop-leave-active { transition: opacity 0.4s; }
+.flash-pop-enter-from { opacity: 0; transform: translateY(-6px); }
+.flash-pop-leave-to { opacity: 0; }
+
+@keyframes hint-in {
+  from { opacity: 0; transform: translate(-50%, 4px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes pulse-low {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
 }
 </style>

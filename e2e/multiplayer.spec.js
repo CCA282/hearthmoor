@@ -55,7 +55,7 @@ test.describe('Multiplayer — guest side', () => {
 
     const position = await page.evaluate(() => window.__engine.scene.localPlayer.position)
     expect(position).toEqual({ x: 5, y: 0.9, z: -3 })
-    await expect(page.locator('.inventory .slot')).toContainText('Pierre × 2')
+    await expect(page.locator('.chip[title="Pierre"] .chip-count')).toContainText('2')
   })
 
   test('sets netState.mode to guest and myPlayerId to their own guestId', async ({ page }) => {

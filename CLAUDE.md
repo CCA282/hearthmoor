@@ -35,7 +35,18 @@ Lobby before starting locally — a save is just a `serializeSnapshot()` payload
 unchanged from hamnet-village), and `engine.newGame(snapshot?)` is the one
 place that resets to a fresh `Scene` and optionally replays a save onto it.
 There's a Quitter button too, the first way to leave a game and return to the
-Lobby at all.
+Lobby at all. A first visual pass landed too: a low-poly player silhouette
+(capsule + head, sharing a material via `mesh.userData.bodyMaterial` for cheap
+recoloring — see `setLocalPlayerId`), a more detailed boar (legs/ears/tusks),
+a small glowing campfire replacing the old placeholder cone, a hemisphere
+light for a colder/warmer sky-ground grade, and a redesigned HUD (icon
+inventory chips, layered health bar, toast) and Lobby (gradient card, ember
+glow, room-code pulse). **No shadows** — a shadow-casting light needs its
+shadow map redrawn every frame regardless of whether it moves (things move
+every frame anyway), and that cost was enough to slow the render loop under
+load, which throttles simulated game time too (`engine.js`'s dt clamp) and
+broke attack-timing e2e tests — not worth it at this scale; revisit only with
+a real profiling case for it.
 
 What does **not** exist yet, despite being in `docs/spec.md`: the other 3 zones
 (Forêt sombre, Marais, Montagne), the other 3 weapons and armor/tier progression

@@ -189,9 +189,9 @@ describe('Scene — setLocalPlayerId', () => {
     const scene = new Scene()
     // Simulate a `state` broadcast creating our own player before joinRoomAsGuest() resolved.
     const early = scene.addPlayer('guest-1', { x: 0, y: 0, z: 0 })
-    const remoteColor = early.mesh.material.color.getHexString()
+    const remoteColor = early.mesh.userData.bodyMaterial.color.getHexString()
 
     scene.setLocalPlayerId('guest-1')
-    expect(early.mesh.material.color.getHexString()).not.toBe(remoteColor)
+    expect(early.mesh.userData.bodyMaterial.color.getHexString()).not.toBe(remoteColor)
   })
 })

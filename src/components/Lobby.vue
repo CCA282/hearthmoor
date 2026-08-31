@@ -129,78 +129,85 @@ const playing = computed(() => netState.mode !== null && step.value !== 'waiting
 <template>
   <transition name="lobby-fade">
     <div class="lobby" v-if="!playing">
-      <div class="card" v-if="step === 'home'">
-        <h1 class="title">🏚️ Hearthmoor</h1>
-        <p class="sub">Aventure/survie coopérative — camp, exploration, combat</p>
-        <div class="name-field">
-          <label class="name-label">Votre pseudo</label>
-          <input
-            class="name-input"
-            v-model="netState.playerName"
-            placeholder="Joueur…"
-            maxlength="12"
-            spellcheck="false"
-          />
-        </div>
-        <div class="actions">
-          <button class="btn primary" @pointerdown="goLocal">🌲 Jouer en local</button>
-          <button class="btn" @pointerdown="goOnline">🌐 Jouer en ligne</button>
-        </div>
-      </div>
-
-      <div class="card" v-else-if="step === 'local_saves'">
-        <h2>Jouer en local</h2>
-        <div class="actions">
-          <button class="btn primary" @pointerdown="startNewLocalGame">🌱 Nouvelle partie</button>
-        </div>
-        <div class="saves-list">
-          <div class="save-entry" v-for="s in localSaves" :key="s.id">
-            <button class="save-btn" :disabled="busy" @pointerdown="continueLocalGame(s.id)">
-              <span class="save-name">▶️ {{ s.name }}</span>
-              <span class="save-date">{{ new Date(s.savedAt).toLocaleString() }}</span>
-            </button>
-            <button class="save-delete" title="Supprimer" @pointerdown="removeSave(s.id)">🗑️</button>
+      <div class="ember" />
+      <transition name="card-swap" mode="out-in">
+        <div class="card" v-if="step === 'home'" key="home">
+          <div class="brand">
+            <span class="brand-flame">🔥</span>
+            <h1 class="title">Hearthmoor</h1>
+          </div>
+          <p class="sub">Aventure/survie coopérative — camp, exploration, combat</p>
+          <div class="name-field">
+            <label class="name-label">Votre pseudo</label>
+            <input
+              class="name-input"
+              v-model="netState.playerName"
+              placeholder="Joueur…"
+              maxlength="12"
+              spellcheck="false"
+            />
+          </div>
+          <div class="actions">
+            <button class="btn primary" @pointerdown="goLocal">🌲 Jouer en local</button>
+            <button class="btn" @pointerdown="goOnline">🌐 Jouer en ligne</button>
           </div>
         </div>
-        <p class="err" v-if="error">{{ error }}</p>
-        <button class="back" @pointerdown="goHome">← Retour</button>
-      </div>
 
-      <div class="card" v-else-if="step === 'online'">
-        <h2>Jouer en ligne</h2>
-        <div class="actions">
-          <button class="btn primary" :disabled="busy" @pointerdown="createRoom">🏕️ Créer une room</button>
-          <button class="btn" @pointerdown="step = 'join'">🔑 Rejoindre une room</button>
+        <div class="card" v-else-if="step === 'local_saves'" key="local_saves">
+          <h2>🌲 Jouer en local</h2>
+          <div class="actions">
+            <button class="btn primary" @pointerdown="startNewLocalGame">🌱 Nouvelle partie</button>
+          </div>
+          <div class="divider" v-if="localSaves.length"><span>ou continuer</span></div>
+          <div class="saves-list">
+            <div class="save-entry" v-for="s in localSaves" :key="s.id">
+              <button class="save-btn" :disabled="busy" @pointerdown="continueLocalGame(s.id)">
+                <span class="save-name">▶️ {{ s.name }}</span>
+                <span class="save-date">{{ new Date(s.savedAt).toLocaleString() }}</span>
+              </button>
+              <button class="save-delete" title="Supprimer" @pointerdown="removeSave(s.id)">🗑️</button>
+            </div>
+          </div>
+          <p class="err" v-if="error">{{ error }}</p>
+          <button class="back" @pointerdown="goHome">← Retour</button>
         </div>
-        <p class="err" v-if="error">{{ error }}</p>
-        <button class="back" @pointerdown="goHome">← Retour</button>
-      </div>
 
-      <div class="card" v-else-if="step === 'join'">
-        <h2>Rejoindre une room</h2>
-        <input
-          class="code-input"
-          v-model="roomCodeInput"
-          placeholder="CODE (6 lettres)"
-          maxlength="6"
-          spellcheck="false"
-          @keydown.enter="joinRoom"
-        />
-        <div class="actions">
-          <button class="btn primary" :disabled="busy" @pointerdown="joinRoom">Rejoindre</button>
+        <div class="card" v-else-if="step === 'online'" key="online">
+          <h2>🌐 Jouer en ligne</h2>
+          <div class="actions">
+            <button class="btn primary" :disabled="busy" @pointerdown="createRoom">🏕️ Créer une room</button>
+            <button class="btn" @pointerdown="step = 'join'">🔑 Rejoindre une room</button>
+          </div>
+          <p class="err" v-if="error">{{ error }}</p>
+          <button class="back" @pointerdown="goHome">← Retour</button>
         </div>
-        <p class="err" v-if="error">{{ error }}</p>
-        <button class="back" @pointerdown="step = 'online'">← Retour</button>
-      </div>
 
-      <div class="card" v-else-if="step === 'waiting_players'">
-        <h2>Room créée</h2>
-        <p class="sub">Partagez ce code avec vos amis :</p>
-        <div class="room-code">{{ displayCode }}</div>
-        <div class="actions">
-          <button class="btn primary" @pointerdown="step = 'playing'">🎮 Jouer !</button>
+        <div class="card" v-else-if="step === 'join'" key="join">
+          <h2>🔑 Rejoindre une room</h2>
+          <input
+            class="code-input"
+            v-model="roomCodeInput"
+            placeholder="CODE (6 lettres)"
+            maxlength="6"
+            spellcheck="false"
+            @keydown.enter="joinRoom"
+          />
+          <div class="actions">
+            <button class="btn primary" :disabled="busy" @pointerdown="joinRoom">Rejoindre</button>
+          </div>
+          <p class="err" v-if="error">{{ error }}</p>
+          <button class="back" @pointerdown="step = 'online'">← Retour</button>
         </div>
-      </div>
+
+        <div class="card" v-else-if="step === 'waiting_players'" key="waiting_players">
+          <h2>🏕️ Room créée</h2>
+          <p class="sub">Partagez ce code avec vos amis :</p>
+          <div class="room-code">{{ displayCode }}</div>
+          <div class="actions">
+            <button class="btn primary" @pointerdown="step = 'playing'">🎮 Jouer !</button>
+          </div>
+        </div>
+      </transition>
     </div>
   </transition>
 </template>
@@ -214,13 +221,27 @@ const playing = computed(() => netState.mode !== null && step.value !== 'waiting
   align-items: center;
   justify-content: center;
   z-index: 100;
+  overflow: hidden;
+}
+
+.ember {
+  position: absolute;
+  bottom: -10%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60vw;
+  height: 40vh;
+  max-width: 700px;
+  background: radial-gradient(circle, rgba(232, 151, 74, 0.16) 0%, rgba(232, 151, 74, 0) 70%);
+  pointer-events: none;
 }
 
 .card {
-  background: var(--moor-panel);
-  border: 2px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  position: relative;
+  background: linear-gradient(180deg, var(--moor-panel), var(--moor-panel-dark));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   padding: 36px 40px 30px;
   min-width: 320px;
   max-width: 420px;
@@ -232,10 +253,51 @@ const playing = computed(() => netState.mode !== null && step.value !== 'waiting
   text-align: center;
   color: var(--moor-ink);
 }
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 16%;
+  right: 16%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--moor-fire), transparent);
+  opacity: 0.6;
+}
 
-.title { margin: 0; font-size: 32px; }
-h2 { margin: 0; font-size: 20px; }
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.brand-flame {
+  font-size: 26px;
+  filter: drop-shadow(0 0 10px rgba(232, 151, 74, 0.6));
+}
+.title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+h2 { margin: 0; font-size: 19px; font-weight: 800; }
 .sub { margin: 0; font-size: 14px; color: var(--moor-ink-soft); }
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: var(--moor-ink-soft);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.divider::before, .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
 
 .actions {
   display: flex;
@@ -249,20 +311,23 @@ h2 { margin: 0; font-size: 20px; }
   padding: 14px;
   font-size: 16px;
   font-weight: 800;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   cursor: pointer;
   background: var(--moor-panel-dark);
   color: var(--moor-ink);
-  transition: transform 0.08s, opacity 0.08s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: transform 0.08s, filter 0.12s, box-shadow 0.12s;
 }
-.btn:hover { transform: translateY(-1px); }
+.btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
 .btn:active { transform: translateY(1px); }
 .btn.primary {
-  background: var(--moor-fire);
+  background: linear-gradient(180deg, #f0a35d, var(--moor-fire));
+  border-color: rgba(255, 255, 255, 0.15);
   color: #2a1608;
+  box-shadow: 0 6px 18px rgba(232, 151, 74, 0.35);
 }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; filter: none; }
 
 .name-field {
   width: 100%;
@@ -291,7 +356,10 @@ h2 { margin: 0; font-size: 20px; }
   color: var(--moor-ink);
   outline: none;
 }
-.name-input:focus, .code-input:focus { border-color: var(--moor-fire); }
+.name-input:focus, .code-input:focus {
+  border-color: var(--moor-fire);
+  box-shadow: 0 0 0 3px rgba(232, 151, 74, 0.18);
+}
 .code-input { letter-spacing: 8px; text-transform: uppercase; }
 
 .room-code {
@@ -300,11 +368,18 @@ h2 { margin: 0; font-size: 20px; }
   letter-spacing: 10px;
   color: var(--moor-fire);
   background: var(--moor-panel-dark);
+  border: 1px solid rgba(232, 151, 74, 0.3);
   border-radius: 12px;
   padding: 14px 20px;
   width: 100%;
   box-sizing: border-box;
   text-align: center;
+  text-shadow: 0 0 18px rgba(232, 151, 74, 0.5);
+  animation: room-code-glow 2.2s ease-in-out infinite;
+}
+@keyframes room-code-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(232, 151, 74, 0); }
+  50% { box-shadow: 0 0 24px rgba(232, 151, 74, 0.25); }
 }
 
 .saves-list {
@@ -327,24 +402,27 @@ h2 { margin: 0; font-size: 20px; }
   align-items: flex-start;
   gap: 2px;
   padding: 10px 14px;
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   background: var(--moor-panel-dark);
   color: var(--moor-ink);
   cursor: pointer;
   text-align: left;
+  transition: transform 0.08s, border-color 0.12s;
 }
-.save-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.save-btn:hover { transform: translateY(-1px); border-color: rgba(232, 151, 74, 0.35); }
+.save-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 .save-name { font-weight: 700; font-size: 14px; }
 .save-date { font-size: 11px; color: var(--moor-ink-soft); }
 .save-delete {
-  border: none;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   background: var(--moor-panel-dark);
   color: var(--moor-ink-soft);
   cursor: pointer;
   padding: 0 12px;
   font-size: 15px;
+  transition: color 0.12s;
 }
 .save-delete:hover { color: #e0736a; }
 
@@ -363,4 +441,8 @@ h2 { margin: 0; font-size: 20px; }
 
 .lobby-fade-enter-active, .lobby-fade-leave-active { transition: opacity 0.4s; }
 .lobby-fade-enter-from, .lobby-fade-leave-to { opacity: 0; }
+
+.card-swap-enter-active, .card-swap-leave-active { transition: opacity 0.15s, transform 0.15s; }
+.card-swap-enter-from { opacity: 0; transform: translateY(6px); }
+.card-swap-leave-to { opacity: 0; transform: translateY(-6px); }
 </style>

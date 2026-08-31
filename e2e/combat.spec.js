@@ -42,7 +42,7 @@ test.describe('Combat — solo', () => {
     })
     expect(health).toBe(0)
     expect(visible).toBe(false)
-    await expect(page.locator('.inventory .slot')).toContainText('Viande × 1')
+    await expect(page.locator('.chip[title="Viande"] .chip-count')).toContainText('1')
   })
 
   test('does not attack when out of range', async ({ page }) => {
