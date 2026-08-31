@@ -10,3 +10,13 @@ export function keyboardMoveVector(keysDown) {
   if (keysDown.has('KeyS') || keysDown.has('ArrowDown')) z += 1
   return { x, z }
 }
+
+const ACTION_KEYS = ['Space', 'KeyE']
+
+// Pure — true only on the frame the action key transitions from up to down
+// (not held), given this frame's and the previous frame's key sets.
+export function keyboardActionPressed(keysDown, prevKeysDown) {
+  const down = ACTION_KEYS.some((k) => keysDown.has(k))
+  const wasDown = ACTION_KEYS.some((k) => prevKeysDown.has(k))
+  return down && !wasDown
+}

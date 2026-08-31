@@ -43,6 +43,7 @@ class Engine {
 
       this.scene.update(dt, this.input)
       this.renderer.render(this.scene.three, this.scene.camera)
+      this.input.endFrame()
 
       this.raf = requestAnimationFrame(loop)
     }

@@ -15,3 +15,11 @@ export function gamepadMoveVector(pad) {
   if (pad.buttons[13]?.pressed) z = 1
   return { x, z }
 }
+
+// Pure — true only on the frame button 0 (A/Cross) transitions from up to
+// down, given this frame's and the previous frame's pad snapshot.
+export function gamepadActionPressed(pad, prevPad) {
+  const down = !!pad?.buttons[0]?.pressed
+  const wasDown = !!prevPad?.buttons[0]?.pressed
+  return down && !wasDown
+}
