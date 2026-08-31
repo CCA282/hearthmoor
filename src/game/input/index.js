@@ -1,5 +1,5 @@
-import { keyboardMoveVector, keyboardActionPressed } from './keyboard.js'
-import { gamepadMoveVector, gamepadActionPressed } from './gamepad.js'
+import { keyboardMoveVector, keyboardActionPressed, keyboardAttackPressed } from './keyboard.js'
+import { gamepadMoveVector, gamepadActionPressed, gamepadAttackPressed } from './gamepad.js'
 import { combineMoveVectors, clampToUnit } from '../scene/movement.js'
 
 // Browser-only wiring (DOM listeners, Gamepad API) — the actual math lives in
@@ -30,6 +30,12 @@ export class Input {
   actionPressed() {
     const kb = keyboardActionPressed(this.keysDown, this._prevKeysDown)
     const pad = gamepadActionPressed(this._firstPad(), this._prevPad)
+    return kb || pad
+  }
+
+  attackPressed() {
+    const kb = keyboardAttackPressed(this.keysDown, this._prevKeysDown)
+    const pad = gamepadAttackPressed(this._firstPad(), this._prevPad)
     return kb || pad
   }
 

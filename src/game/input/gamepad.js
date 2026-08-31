@@ -16,10 +16,20 @@ export function gamepadMoveVector(pad) {
   return { x, z }
 }
 
+function edgePressed(index, pad, prevPad) {
+  const down = !!pad?.buttons[index]?.pressed
+  const wasDown = !!prevPad?.buttons[index]?.pressed
+  return down && !wasDown
+}
+
 // Pure — true only on the frame button 0 (A/Cross) transitions from up to
 // down, given this frame's and the previous frame's pad snapshot.
 export function gamepadActionPressed(pad, prevPad) {
-  const down = !!pad?.buttons[0]?.pressed
-  const wasDown = !!prevPad?.buttons[0]?.pressed
-  return down && !wasDown
+  return edgePressed(0, pad, prevPad)
+}
+
+// Pure — same edge-detection, button 2 (X/Square) — kept separate from the
+// interact/harvest button, see keyboard.js's keyboardAttackPressed.
+export function gamepadAttackPressed(pad, prevPad) {
+  return edgePressed(2, pad, prevPad)
 }

@@ -11,12 +11,24 @@ export function keyboardMoveVector(keysDown) {
   return { x, z }
 }
 
-const ACTION_KEYS = ['Space', 'KeyE']
-
-// Pure — true only on the frame the action key transitions from up to down
-// (not held), given this frame's and the previous frame's key sets.
-export function keyboardActionPressed(keysDown, prevKeysDown) {
-  const down = ACTION_KEYS.some((k) => keysDown.has(k))
-  const wasDown = ACTION_KEYS.some((k) => prevKeysDown.has(k))
+function edgePressed(keys, keysDown, prevKeysDown) {
+  const down = keys.some((k) => keysDown.has(k))
+  const wasDown = keys.some((k) => prevKeysDown.has(k))
   return down && !wasDown
+}
+
+const ACTION_KEYS = ['Space', 'KeyE']
+const ATTACK_KEYS = ['KeyF', 'ShiftLeft']
+
+// Pure — true only on the frame the interact/harvest key transitions from up
+// to down (not held), given this frame's and the previous frame's key sets.
+export function keyboardActionPressed(keysDown, prevKeysDown) {
+  return edgePressed(ACTION_KEYS, keysDown, prevKeysDown)
+}
+
+// Pure — same edge-detection, but the attack key (deliberately separate from
+// the interact/harvest key so a player can stand near both a resource node
+// and an enemy without one action accidentally triggering the other).
+export function keyboardAttackPressed(keysDown, prevKeysDown) {
+  return edgePressed(ATTACK_KEYS, keysDown, prevKeysDown)
 }
