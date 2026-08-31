@@ -8,11 +8,22 @@ as `hamnet-village`/`cine-planner`, but a separate concern (no shared table).
 
 ## Project status
 
-**Bootstrapping.** See `docs/spec.md` for the full v1 design spec (agreed with the
-user) and `docs/hamnet-village-tech-foundation.md` for the technical patterns this
-project reuses from `hamnet-village`. This section will be replaced by the real
-architecture doc as things get built — keep it in sync with what actually exists,
-not with the aspirational spec.
+**Early foundation, not yet a game.** What exists and works: project scaffold,
+`net/` layer (Supabase client/auth/realtime rooms/generic save-load), a minimal
+Three.js scene (semi-isometric camera, ground, fog, lighting), keyboard+gamepad
+player movement, and a Lobby (local / create room / join room by code).
+
+What does **not** exist yet, despite being in `docs/spec.md`: zones, combat,
+inventory/equipment, crafting, buildings, any actual scene state sync between
+host/guest (rooms connect via Presence but each client currently renders its own
+unsynced local scene), and save/load of real game state (`net/sync.js`'s
+`saveLocal`/`saveServer` are wired but nothing calls them yet — there's no
+`serializeWorld`/`applyWorldState` equivalent, deferred until there's meaningful
+state to persist).
+
+See `docs/spec.md` for the full v1 design spec and `docs/hamnet-village-tech-foundation.md`
+for the technical patterns reused from `hamnet-village`. Keep this section in
+sync with what actually exists, not with the aspirational spec.
 
 ## Commands
 
@@ -51,13 +62,28 @@ semi-isometric camera** (movement stays relative to the world, not the camera).
   essentially unchanged from `hamnet-village`, just re-prefixed (`hearthmoor:room:`
   topics, `hearthmoor_worlds` table).
 
-### File map (fills in as built)
+### File map
 
 | Path | Role |
 |------|------|
-| `src/game/engine.js` | Singleton: RAF loop, canvas resize, input↔scene bridge |
-| `src/game/scene/Scene.js` | `Scene` class shell (Three.js) — equivalent of hamnet-village's `World.js` |
-| `src/net/*` | Supabase client, auth, room realtime relay, save/load — ported from `hamnet-village` |
+| `src/game/engine.js` | Singleton: RAF loop over `THREE.WebGLRenderer`, canvas resize, owns the `Input` instance |
+| `src/game/scene/Scene.js` | `Scene` class (Three.js) — camera/ground/lights/fog setup + player mesh, equivalent of hamnet-village's `World.js` |
+| `src/game/scene/camera.js` | Pure camera-follow math (no THREE/DOM) — unit-tested in isolation |
+| `src/game/scene/movement.js` | Pure movement math (combine/clamp input vectors, step position) — unit-tested in isolation |
+| `src/game/input/index.js` | `Input` class — DOM/Gamepad API wiring only, delegates math to `keyboard.js`/`gamepad.js` |
+| `src/game/input/keyboard.js`, `gamepad.js` | Pure functions: input state → world-space movement vector |
+| `src/game/constants/*` | Declarative tuning data (camera offset/frustum, player speed) — no logic |
+| `src/components/GameCanvas.vue` | Mounts the `<canvas>`, calls `engine.start()`/`stop()` |
+| `src/components/Lobby.vue` | Home screen: pseudo, local mode, create/join room |
+| `src/net/*` | Supabase client, auth, room realtime relay (`hearthmoor:room:` prefix), generic save/load — ported from `hamnet-village` |
+
+Testing convention established here (mirrors hamnet-village's `World.js` mixins
+never being unit-tested directly, only their logic): anything that touches THREE
+objects, the DOM, or the Gamepad API (`Scene.js`, `engine.js`, `input/index.js`)
+is wiring-only and **not** unit tested — the math it depends on is extracted into
+plain functions (`scene/camera.js`, `scene/movement.js`, `input/keyboard.js`,
+`input/gamepad.js`) that are. Keep following this split as more systems
+(combat, inventory...) get added.
 
 ### Tests
 
